@@ -30,6 +30,7 @@ void FileManager::Initialize()
  * 效果：建立打开文件结构，内存i节点开锁 、i_count 为正数（i_count ++）
  * */
 // 要打开的文件路径保存在u_dirp中
+// u_uarg中为文件打开的权限
 void FileManager::Open()
 {
 	Inode* pInode;
@@ -153,7 +154,7 @@ void FileManager::Open1(Inode* pInode, int mode, int trf)
 	pFile->f_inode = pInode;
 
 	/* 特殊设备打开函数 */
-	pInode->OpenI(mode & File::FWRITE);
+	// pInode->OpenI(mode & File::FWRITE);
 
 	/* 为打开或者创建文件的各种资源都已成功分配，函数返回 */
 	if ( u.u_error == 0 )
@@ -555,7 +556,8 @@ Inode* FileManager::NameI( char (*func)(), enum DirectorySearchMode mode )
 	}
 
 	/* 检查该Inode是否正在被使用，以及保证在整个目录搜索过程中该Inode不被释放 */
-	// 并行编程意识：读取pInode是critical region
+	// 查找dev，i_number对应的内存inode或为其分配新的内存inode
+	// 增加该inode的i_count，上锁该inode
 	this->m_InodeTable->IGet(pInode->i_dev, pInode->i_number);
 
 	/* 允许出现////a//b 这种路径 这种路径等价于/a/b */

@@ -435,50 +435,50 @@ int Inode::Bmap(int lbn)
 }
 
 
-// 不知道是否要保留
-// 特殊块设备算登记磁盘？
-void Inode::OpenI(int mode)
-{
-	short dev;
-	DeviceManager& devMgr = Kernel::Instance().GetDeviceManager();
-	User& u = Kernel::Instance().GetUser();
+// // 不知道是否要保留
+// // 特殊块设备算登记磁盘？
+// void Inode::OpenI(int mode)
+// {
+// 	short dev;
+// 	DeviceManager& devMgr = Kernel::Instance().GetDeviceManager();
+// 	User& u = Kernel::Instance().GetUser();
 
-	/* 
-	 * 对于特殊块设备、字符设备文件，i_addr[]不再是
-	 * 磁盘块号索引表，addr[0]中存放了设备号dev
-	 */
-	dev = this->i_addr[0];
+// 	/* 
+// 	 * 对于特殊块设备、字符设备文件，i_addr[]不再是
+// 	 * 磁盘块号索引表，addr[0]中存放了设备号dev
+// 	 */
+// 	dev = this->i_addr[0];
 
-	/* 提取主设备号 */
-	short major = Utility::GetMajor(dev);
+// 	/* 提取主设备号 */
+// 	short major = Utility::GetMajor(dev);
 
-	switch( this->i_mode & Inode::IFMT)
-	{
-	case Inode::IFCHR:	/* 字符设备特殊类型文件 */
-		if (major >= devMgr.GetNChrDev())
-		{
-			u.u_error = User::ENXIO;   /* no such device */
-			return;
-		}
-		devMgr.GetCharDevice(major).Open(dev,mode);
-		break;
+// 	switch( this->i_mode & Inode::IFMT)
+// 	{
+// 	case Inode::IFCHR:	/* 字符设备特殊类型文件 */
+// 		if (major >= devMgr.GetNChrDev())
+// 		{
+// 			u.u_error = User::ENXIO;   /* no such device */
+// 			return;
+// 		}
+// 		devMgr.GetCharDevice(major).Open(dev,mode);
+// 		break;
 
-	case Inode::IFBLK:	/* 块设备特殊类型文件 */
-		/* 检查设备号是否超出系统中块设备数量 */
-		if(major >= devMgr.GetNBlkDev())
-		{
-			u.u_error = User::ENXIO;    /* no such device */
-			return;
-		}
-		/* 根据主设备号获取对应的块设备BlockDevice对象引用 */
-		BlockDevice& bdev = devMgr.GetBlockDevice(major);
-		/* 调用该设备的特定初始化逻辑 */
-		bdev.Open(dev, mode);
-		break;
-	}
+// 	case Inode::IFBLK:	/* 块设备特殊类型文件 */
+// 		/* 检查设备号是否超出系统中块设备数量 */
+// 		if(major >= devMgr.GetNBlkDev())
+// 		{
+// 			u.u_error = User::ENXIO;    /* no such device */
+// 			return;
+// 		}
+// 		/* 根据主设备号获取对应的块设备BlockDevice对象引用 */
+// 		BlockDevice& bdev = devMgr.GetBlockDevice(major);
+// 		/* 调用该设备的特定初始化逻辑 */
+// 		bdev.Open(dev, mode);
+// 		break;
+// 	}
 
-	return;
-}
+// 	return;
+// }
 
 void Inode::CloseI(int mode)
 {
@@ -685,17 +685,17 @@ void Inode::ITrunc()
 // 	this->i_flag |= Inode::ILOCK;
 // }
 
-// void Inode::Prele()
-// {
-// 	/* 解锁pipe或Inode,并且唤醒相应进程 */
-// 	this->i_flag &= ~Inode::ILOCK;
+void Inode::Prele()
+{
+	/* 解锁pipe或Inode,并且唤醒相应进程 */
+	this->i_flag &= ~Inode::ILOCK;
 
-// 	if (this->i_flag & Inode::IWANT)
-// 	{
-// 		this->i_flag &= ~Inode::IWANT;
-// 		Kernel::Instance().GetProcessManager().WakeUpAll((unsigned long)this);
-// 	}
-// }
+	if (this->i_flag & Inode::IWANT)
+	{
+		this->i_flag &= ~Inode::IWANT;
+		Kernel::Instance().GetProcessManager().WakeUpAll((unsigned long)this);
+	}
+}
 
 // void Inode::Plock()
 // {

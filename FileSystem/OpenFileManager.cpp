@@ -117,7 +117,7 @@ Inode* InodeTable::IGet(short dev, int inumber)
 				/* 增设IWANT标志，然后睡眠 */
 				pInode->i_flag |= Inode::IWANT;
 				
-				u.u_procp->Sleep((unsigned long)&pInode, ProcessManager::PINOD);
+				// u.u_procp->Sleep((unsigned long)&pInode, ProcessManager::PINOD);
 				
 				/* 回到while循环，需要重新搜索，因为该内存Inode可能已经失效 */
 				continue;
@@ -152,6 +152,7 @@ Inode* InodeTable::IGet(short dev, int inumber)
 		}
 		else	/* 没有Inode的内存拷贝，则分配一个空闲内存Inode */
 		{
+			// 找到内存inode表中i_count=0的inode，重新分配该inode
 			pInode = this->GetFreeInode();
 			/* 若内存Inode表已满，分配空闲Inode失败 */
 			if(NULL == pInode)

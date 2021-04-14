@@ -78,11 +78,11 @@ public:
 	 */
 	int Bmap(int lbn);
 	
-	/* 
-	 * @comment 对特殊字符设备、块设备文件，调用该设备注册在块设备开关表
-	 * 中的设备初始化程序
-	 */
-	void OpenI(int mode);
+	// /* 
+	//  * @comment 对特殊字符设备、块设备文件，调用该设备注册在块设备开关表
+	//  * 中的设备初始化程序
+	//  */
+	// void OpenI(int mode);
 	/* 
 	 * @comment 对特殊字符设备、块设备文件。如果对该设备的引用计数为0，
 	 * 则调用该设备的关闭程序
@@ -101,7 +101,7 @@ public:
 	// /* 
 	//  * @comment 对Pipe或者Inode解锁，并且唤醒因等待锁而睡眠的进程
 	//  */
-	// void Prele();
+	void Prele();
 
 	// /* 
 	//  * @comment 对Pipe上锁，如果Pipe已经被上锁，则增设IWANT标志并睡眠等待直至解锁
