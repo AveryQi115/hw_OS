@@ -8,7 +8,7 @@
 
 /*==============================class SuperBlock===================================*/
 /* 系统全局超级块SuperBlock对象 */
-SuperBlock g_spb;
+SuperBlock* g_spb;
 
 SuperBlock::SuperBlock()
 {
@@ -68,7 +68,7 @@ void FileSystem::LoadSuperBlock()
 	// 起始扇区号为FileSystem::SUPER_BLOCK_SECTOR_NUMBER
 	for (int i = 0; i < 2; i++)
 	{
-		int* p = (int *)&g_spb + i * 128;
+		int* p = (int *)g_spb + i * 128;
 
 		pBuf = bufMgr.Bread(DeviceManager::ROOTDEV, FileSystem::SUPER_BLOCK_SECTOR_NUMBER + i);
 
@@ -84,12 +84,12 @@ void FileSystem::LoadSuperBlock()
 	}
 
 	this->m_Mount[0].m_dev = DeviceManager::ROOTDEV;
-	this->m_Mount[0].m_spb = &g_spb;
+	this->m_Mount[0].m_spb = g_spb;
 
-	g_spb.s_flock = 0;
-	g_spb.s_ilock = 0;
-	g_spb.s_ronly = 0;
-	g_spb.s_time = Time::time;
+	g_spb->s_flock = 0;
+	g_spb->s_ilock = 0;
+	g_spb->s_ronly = 0;
+	g_spb->s_time = Time::time;
 }
 
 SuperBlock* FileSystem::GetFS(short dev)
@@ -180,6 +180,9 @@ void FileSystem::Update()
 	this->m_BufferManager->Bflush(DeviceManager::NODEV);
 }
 
+// 分配空闲inode
+// s_ninode代表当前空闲inode表中的空闲inode数，也是空闲inode表栈顶
+// 如果s_ninode<=0会重新搜索inode区，填补空闲inode表
 Inode* FileSystem::IAlloc(short dev)
 {
 	SuperBlock* sb;
@@ -194,7 +197,8 @@ Inode* FileSystem::IAlloc(short dev)
 	/* 如果SuperBlock空闲Inode表被上锁，则睡眠等待至解锁 */
 	while(sb->s_ilock)
 	{
-		u.u_procp->Sleep((unsigned long)&sb->s_ilock, ProcessManager::PINOD);
+		Diagnose::Write("FileSystem::IAlloc, Sleep...");
+		//u.u_procp->Sleep((unsigned long)&sb->s_ilock, ProcessManager::PINOD);
 	}
 
 	/* 
@@ -208,8 +212,8 @@ Inode* FileSystem::IAlloc(short dev)
 		/* 空闲Inode索引表上锁 */
 		sb->s_ilock++;
 
-		/* 外存Inode编号从0开始，这不同于Unix V6中外存Inode从1开始编号 */
-		ino = -1;
+		/* 外存Inode编号从1开始编号 */
+		ino = 0;
 
 		/* 依次读入磁盘Inode区中的磁盘块，搜索其中空闲外存Inode，记入空闲Inode索引表 */
 		for(int i = 0; i < sb->s_isize; i++)
@@ -261,7 +265,7 @@ Inode* FileSystem::IAlloc(short dev)
 		}
 		/* 解除对空闲外存Inode索引表的锁，唤醒因为等待锁而睡眠的进程 */
 		sb->s_ilock = 0;
-		Kernel::Instance().GetProcessManager().WakeUpAll((unsigned long)&sb->s_ilock);
+		//Kernel::Instance().GetProcessManager().WakeUpAll((unsigned long)&sb->s_ilock);
 		
 		/* 如果在磁盘上没有搜索到任何可用外存Inode，返回NULL */
 		if(sb->s_ninode <= 0)
@@ -354,7 +358,8 @@ Buf* FileSystem::Alloc(short dev)
 	while(sb->s_flock)
 	{
 		/* 进入睡眠直到获得该锁才继续 */
-		u.u_procp->Sleep((unsigned long)&sb->s_flock, ProcessManager::PINOD);
+		Diagnose::Write("FileSystem::Alloc, Sleep...");
+		//u.u_procp->Sleep((unsigned long)&sb->s_flock, ProcessManager::PINOD);
 	}
 
 	/* 从索引表“栈顶”获取空闲磁盘块编号 */
@@ -406,7 +411,7 @@ Buf* FileSystem::Alloc(short dev)
 
 		/* 解除对空闲磁盘块索引表的锁，唤醒因为等待锁而睡眠的进程 */
 		sb->s_flock = 0;
-		Kernel::Instance().GetProcessManager().WakeUpAll((unsigned long)&sb->s_flock);
+		//Kernel::Instance().GetProcessManager().WakeUpAll((unsigned long)&sb->s_flock);
 	}
 
 	/* 普通情况下成功分配到一空闲磁盘块 */
@@ -435,7 +440,8 @@ void FileSystem::Free(short dev, int blkno)
 	/* 如果空闲磁盘块索引表被上锁，则睡眠等待解锁 */
 	while(sb->s_flock)
 	{
-		u.u_procp->Sleep((unsigned long)&sb->s_flock, ProcessManager::PINOD);
+		Diagnose::Write("FileSystem::Free, Sleep...");
+		//u.u_procp->Sleep((unsigned long)&sb->s_flock, ProcessManager::PINOD);
 	}
 
 	/* 检查释放磁盘块的合法性 */
@@ -478,7 +484,7 @@ void FileSystem::Free(short dev, int blkno)
 		this->m_BufferManager->Bwrite(pBuf);
 
 		sb->s_flock = 0;
-		Kernel::Instance().GetProcessManager().WakeUpAll((unsigned long)&sb->s_flock);
+		//Kernel::Instance().GetProcessManager().WakeUpAll((unsigned long)&sb->s_flock);
 	}
 	sb->s_free[sb->s_nfree++] = blkno;	/* SuperBlock中记录下当前释放盘块号 */
 	sb->s_fmod = 1;

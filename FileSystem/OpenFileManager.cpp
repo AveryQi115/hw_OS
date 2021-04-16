@@ -117,6 +117,7 @@ Inode* InodeTable::IGet(short dev, int inumber)
 				/* 增设IWANT标志，然后睡眠 */
 				pInode->i_flag |= Inode::IWANT;
 				
+				Diagnose::Write("Sleep when waiting for locked inode in OpenFileManager::IGet");
 				// u.u_procp->Sleep((unsigned long)&pInode, ProcessManager::PINOD);
 				
 				/* 回到while循环，需要重新搜索，因为该内存Inode可能已经失效 */

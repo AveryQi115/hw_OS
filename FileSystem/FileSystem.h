@@ -5,6 +5,9 @@
 #include "Buf.h"
 #include "BufferManager.h"
 
+#define INODE_NUM 822
+#define BLOCK_NUM 18000
+
 /*
  * 文件系统存储资源管理块(Super Block)的定义。
  */
@@ -16,7 +19,7 @@ public:
 	SuperBlock();
 	/* Destructors */
 	~SuperBlock();
-	
+
 	/* Members */
 public:
 	int		s_isize;		/* 外存Inode区占用的盘块数 */
@@ -37,6 +40,7 @@ public:
 	int		padding[47];	/* 填充使SuperBlock块大小等于1024字节，占据2个扇区 */
 };
 
+extern SuperBlock* g_spb;
 
 /*
  * 文件系统装配块(Mount)的定义。
@@ -79,7 +83,7 @@ public:
 
 	static const int SUPER_BLOCK_SECTOR_NUMBER = 200;	/* 定义SuperBlock位于磁盘上的扇区号，占据200，201两个扇区。 */
 
-	static const int ROOTINO = 0;			/* 文件系统根目录外存Inode编号 */
+	static const int ROOTINO = 1;			/* 文件系统根目录外存Inode编号 */
 
 	static const int INODE_NUMBER_PER_SECTOR = 8;		/* 外存INode对象长度为64字节，每个磁盘块可以存放512/64 = 8个外存Inode */
 	static const int INODE_ZONE_START_SECTOR = 202;		/* 外存Inode区位于磁盘上的起始扇区号 */
