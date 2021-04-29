@@ -16,6 +16,15 @@ SuperBlock::~SuperBlock()
 	//nothing to do here
 }
 
+void SuperBlock::debug(int i,int j){
+    cout<<"外存Inode区占用的盘块数:    "<<s_isize<<endl;
+    cout<<"空闲外存Inode数量:          "<<s_ninode<<endl;
+    cout<<"盘块总数:                  "<<s_fsize<<endl;
+    cout<<"空闲盘块数量:               "<<s_nfree<<endl;
+    cout<<"空闲外存Inode索引表第"<<i<<"项:    "<<s_inode[i]<<endl;
+    cout<<"空闲盘块索引表第"<<j<<"项:   "<<s_free[j]<<endl;
+}
+
 extern DeviceDriver g_DeviceDriver;
 extern BufferManager g_BufferManager;
 extern SuperBlock g_SuperBlock;
@@ -128,13 +137,13 @@ void FileSystem::Update() {
 		// 拿到对应缓存
 		pBuffer = this->bufferManager->GetBlk(FileSystem::SUPERBLOCK_START_SECTOR + j);
 		// 内存写入缓存
-		memcpy(pBuffer->addr, p, BLOCK_SIZE);
+		memcpy(pBuffer->b_addr, p, BLOCK_SIZE);
 
 		// 缓存写磁盘
 		this->bufferManager->Bwrite(pBuffer);
 	}
 	// 内存inodeTable写磁盘
-	g_INodeTable.UpdateINodeTable();
+	g_INodeTable.UpdateInodeTable();
 	// 缓存所有延迟写的缓存块刷入磁盘
 	this->bufferManager->Bflush();
 }
@@ -151,7 +160,8 @@ Buf* FileSystem::Alloc() {
     /* 若获取磁盘块编号为零，则表示已分配尽所有的空闲磁盘块。*/
 	if (blkno <= 0) {
 		superBlock->s_nfree = 0;
-		u.u_error = User::ENOSPC;
+        // cout<<"alloc error"<<endl;
+		u.u_error = User::U_ENOSPC;
 		return NULL;
 	}
 
@@ -161,7 +171,7 @@ Buf* FileSystem::Alloc() {
 	*/
     if (superBlock->s_nfree <= 0) {
 		pBuffer = this->bufferManager->Bread(blkno);
-		int* p = (int *)pBuffer->addr;
+		int* p = (int *)pBuffer->b_addr;
 		superBlock->s_nfree = *p++;
 		memcpy(superBlock->s_free, p, sizeof(superBlock->s_free));
 		this->bufferManager->Brelse(pBuffer);
@@ -188,7 +198,7 @@ Inode* FileSystem::IAlloc() {
         ino = -1;
         for (int i = 0; i < superBlock->s_isize; ++i) {
             pBuffer = this->bufferManager->Bread(FileSystem::INODE_ZONE_START_SECTOR + i);
-            int* p = (int*)pBuffer->addr;
+            int* p = (int*)pBuffer->b_addr;
             for (int j = 0; j < FileSystem::INODE_NUMBER_PER_SECTOR; ++j) {
                 ++ino;
                 int mode = *(p + j * sizeof(DiskInode) / sizeof(int));
@@ -211,12 +221,13 @@ Inode* FileSystem::IAlloc() {
             }
 
             this->bufferManager->Brelse(pBuffer);
-            if (superBlock->s_ninode >= SuperBlock::MAX_NINODE) {
+            if (superBlock->s_ninode >= 100) {
                 break;
             }
         }
         if (superBlock->s_ninode <= 0) {
-            u.u_error = User::ENOSPC;
+            // cout<<"ialloc error"<<endl;
+            u.u_error = User::U_ENOSPC;
             return NULL;
         }
     }
@@ -251,7 +262,7 @@ void FileSystem::Free(int blkno) {
 
 	if (superBlock->s_nfree >=100 ) {
 		pBuffer = this->bufferManager->GetBlk(blkno);
-		int *p = (int*)pBuffer->addr;
+		int *p = (int*)pBuffer->b_addr;
 		*p++ = superBlock->s_nfree;
 		memcpy(p, superBlock->s_free, sizeof(int)*100);
 		superBlock->s_nfree = 0;

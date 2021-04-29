@@ -1,8 +1,7 @@
+#pragma once
+
 #include "bits/stdc++.h"
 using namespace std;
-#ifndef device_driver_h
-#define device_driver_h
-
 
 class DeviceDriver {
 public:
@@ -31,8 +30,3 @@ public:
     void read(void* buffer, unsigned int size, 
         int offset = -1, unsigned int origin = SEEK_SET);
 };
-
-const char* DiskDriver::DISK_FILE_NAME = "disk.img";
-
-
-#endif

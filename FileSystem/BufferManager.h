@@ -24,9 +24,13 @@ public:
 
 	void Bwrite(Buf* bp);				/* 写一个磁盘块 */
 
+	void Bdwrite(Buf* bp);
+
 	void Bclear(Buf* bp);				/* 磁盘块全部清零 */
 
 	void Bflush();						/* 所有延迟写的缓存全部输出到磁盘 */
+
+    void FormatBuffer();				/* 格式化所有Buffer */
 
 private:
 	void insertHead(Buf* bp);

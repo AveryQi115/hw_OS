@@ -17,6 +17,8 @@ public:
 	/* Destructors */
 	~SuperBlock();
 
+    void debug(int i=0,int j=0);
+
 	/* Members */
 public:
 	int		s_isize;		/* 外存Inode区占用的盘块数 */
@@ -115,13 +117,13 @@ public:
     void Update();
 
     /* 在存储设备dev上分配一个空闲外存INode，一般用于创建新的文件。*/
-    INode* IAlloc();
+    Inode* IAlloc();
 
     /* 释放编号为number的外存INode，一般用于删除文件。*/
     void IFree(int number);
 
     /* 在存储设备上分配空闲磁盘块 */
-    Buffer* Alloc();
+    Buf* Alloc();
 
     /* 释放存储设备dev上编号为blkno的磁盘块 */
     void Free(int blkno);

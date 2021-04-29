@@ -87,6 +87,8 @@ public:
 	 * @comment 将包含外存Inode字符块中信息拷贝到内存Inode中
 	 */
 	void ICopy(Buf* bp, int inumber);
+
+	void debug();
 	
 	/* Members */
 public:

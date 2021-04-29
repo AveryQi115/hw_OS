@@ -56,14 +56,14 @@ void Inode::ReadI()
 	this->i_flag |= Inode::IACC;		/* inode访问位置1 */
 
 	
-	while( User::NOERROR == u.u_error && u.u_IOParam.m_Count != 0)
+	while( User::U_NOERROR == u.u_error && u.u_IOParam.m_Count != 0)
 	{
 		//m_Offest 文件偏移指针，根据指针位置算出逻辑块号和当前块内偏移量
 		lbn = bn = u.u_IOParam.m_Offset / Inode::BLOCK_SIZE;
 		offset = u.u_IOParam.m_Offset % Inode::BLOCK_SIZE;
 
 		// nbytes = min(当前块有效字节，m_count)
-		nbytes = Utility::Min(Inode::BLOCK_SIZE - offset, u.u_IOParam.m_Count);
+		nbytes = Utility::min(Inode::BLOCK_SIZE - offset, u.u_IOParam.m_Count);
 		
 		// remain 总剩余 = 总文件大小 - 指针偏移量
 		int remain = this->i_size - u.u_IOParam.m_Offset;
@@ -74,7 +74,7 @@ void Inode::ReadI()
 		}
 
 		// nbytes=min(当前块需读且可读字节，文件剩余长度)
-		nbytes = Utility::Min(nbytes, remain);
+		nbytes = Utility::min(nbytes, remain);
 
 		// bn：物理盘块号
 		if( (bn = this->Bmap(lbn)) == 0 )
@@ -88,7 +88,7 @@ void Inode::ReadI()
 		/* 缓存中数据起始读位置 */
 		unsigned char* start = pBuf->b_addr + offset;
 		// 缓存拷到内存中
-		memcpy(u.IOParam.base, start, nbytes);
+		memcpy(u.u_IOParam.m_Base, start, nbytes);
 
 		/* 用传送字节数nbytes更新读写位置 */
 		u.u_IOParam.m_Base += nbytes;
@@ -124,11 +124,11 @@ void Inode::WriteI()
 		return;
 	}
 
-	while( User::NOERROR == u.u_error && u.u_IOParam.m_Count != 0 )
+	while( User::U_NOERROR == u.u_error && u.u_IOParam.m_Count != 0 )
 	{
 		lbn = u.u_IOParam.m_Offset / Inode::BLOCK_SIZE;
 		offset = u.u_IOParam.m_Offset % Inode::BLOCK_SIZE;
-		nbytes = Utility::Min(Inode::BLOCK_SIZE - offset, u.u_IOParam.m_Count);
+		nbytes = Utility::min(Inode::BLOCK_SIZE - offset, u.u_IOParam.m_Count);
 
 		/* 将逻辑块号lbn转换成物理盘块号bn */
 		if( (bn = this->Bmap(lbn)) == 0 )
@@ -151,14 +151,14 @@ void Inode::WriteI()
 		unsigned char* start = pBuf->b_addr + offset;
 
 		// 内存拷入缓存
-		memcpy(start, u.IOParam.base, nbytes);
+		memcpy(start, u.u_IOParam.m_Base, nbytes);
 
 		/* 用传送字节数nbytes更新读写位置 */
 		u.u_IOParam.m_Base += nbytes;
 		u.u_IOParam.m_Offset += nbytes;
 		u.u_IOParam.m_Count -= nbytes;
 
-		if( u.u_error != User::NOERROR )	/* 写过程中出错 */
+		if( u.u_error != User::U_NOERROR )	/* 写过程中出错 */
 		{
 			bufMgr.Brelse(pBuf);
 		}
@@ -210,7 +210,7 @@ int Inode::Bmap(int lbn)
 	// 太大了不允许
 	if(lbn >= Inode::HUGE_FILE_BLOCK)
 	{
-		u.u_error = User::EFBIG;
+		u.u_error = User::U_EFBIG;
 		return 0;
 	}
 
@@ -258,7 +258,7 @@ int Inode::Bmap(int lbn)
 		{
 			this->i_flag |= Inode::IUPD;
 			/* 分配一空闲盘块存放间接索引表 */
-			if( (pFirstBuf = fileSys.Alloc() == NULL )
+			if( (pFirstBuf = fileSys.Alloc()) == NULL )
 			{
 				return 0;	/* 分配失败 */
 			}
@@ -285,7 +285,7 @@ int Inode::Bmap(int lbn)
 			phyBlkno = iTable[index];
 			if( 0 == phyBlkno )
 			{
-				if( (pSecondBuf = fileSys.Alloc() == NULL)
+				if( (pSecondBuf = fileSys.Alloc()) == NULL)
 				{
 					/* 分配一次间接索引表磁盘块失败，释放缓存中的二次间接索引表，然后返回 */
 					bufMgr.Brelse(pFirstBuf);
@@ -497,7 +497,7 @@ void Inode::Clean()
 // 输入外存inode对应buf
 void Inode::ICopy(Buf *bp, int inumber)
 {
-	DiskInode& dINode = *(DiskInode*)(pb->addr + (inumber%FileSystem::INODE_NUMBER_PER_SECTOR)*sizeof(DiskInode));
+	DiskInode& dInode = *(DiskInode*)(bp->b_addr + (inumber%FileSystem::INODE_NUMBER_PER_SECTOR)*sizeof(DiskInode));
 
 	/* 将外存Inode变量dInode中信息复制到内存Inode中 */
 	this->i_mode = dInode.d_mode;
@@ -509,6 +509,11 @@ void Inode::ICopy(Buf *bp, int inumber)
 	{
 		this->i_addr[i] = dInode.d_addr[i];
 	}
+}
+
+void Inode::debug(){
+	cout << "disk inumber: "<<i_number<<endl;
+	cout << "file size: "<<i_size<<endl;
 }
 
 

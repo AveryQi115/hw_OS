@@ -1,5 +1,7 @@
 #include "DeviceDriver.h"
 
+const char* DeviceDriver::DISK_FILE_NAME = "disk.img";
+
 DeviceDriver::DeviceDriver() {
     fp = fopen(DISK_FILE_NAME, "rb+");
 }

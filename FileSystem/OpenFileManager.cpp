@@ -54,7 +54,7 @@ File* OpenFileTable::FAlloc()
 		}
 	}
 
-	u.u_error = User::ENFILE;
+	u.u_error = User::U_ENFILE;
 	return NULL;
 }
 
@@ -66,7 +66,7 @@ void OpenFileTable::CloseF(File *pFile)
 	pFile->f_count--;
 	if(pFile->f_count <= 0)
 	{
-		g_InodeTable.IPut(pFile->f_inode);
+		g_INodeTable.IPut(pFile->f_inode);
 	}
 }
 
@@ -109,7 +109,7 @@ Inode* InodeTable::IGet(int inumber)
     }
 
 	// 在内存InodeTable中找一个空闲的
-	pINode = GetFreeINode();
+	pINode = GetFreeInode();
     if (NULL == pINode) {
         cout << "INode Table Overflow !" << endl;
         g_User.u_error = User::U_ENFILE;

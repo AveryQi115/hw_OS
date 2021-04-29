@@ -1,5 +1,4 @@
 #include "BufferManager.h"
-#include "console_output.h"
 
 extern DeviceDriver g_DeviceDriver;
 
@@ -7,8 +6,6 @@ BufferManager::BufferManager()
 {
 	//new head Node
 	m_Buf_head = new Buf;
-	if(!m_Buf_head)
-		Diagnose::Write("No space for Buffer head Node");
     Initialize();
     this->m_DeviceDriver = &g_DeviceDriver;
 }
@@ -18,6 +15,14 @@ BufferManager::~BufferManager()
 	//nothing to do here
 	Bflush();
     delete m_Buf_head;
+}
+
+void BufferManager::FormatBuffer() {
+    Buf emptyBuffer;
+    for (int i = 0; i < NBUF; ++i) {
+        memcpy(m_Buf + i, &emptyBuffer, sizeof(Buf));
+    }
+    Initialize();
 }
 
 void BufferManager::Initialize()
@@ -55,7 +60,6 @@ Buf* BufferManager::GetBlk(int blkno)
     }
     bp = m_Buf_head->back;
 	if (bp == m_Buf_head) {
-		Diagnose::Write("无Buffer可供使用");
 		return nullptr;
 	}
     detachNode(bp);
@@ -135,6 +139,12 @@ void BufferManager::Bwrite(Buf *bp)
 	bp->b_flags &= ~(Buf::B_DELWRI);
 	m_DeviceDriver->write(bp->b_addr,BUFFER_SIZE,bp->b_blkno*BUFFER_SIZE);
 	bp->b_flags |= Buf::B_DONE;
+	this->Brelse(bp);
+	return;
+}
+
+void BufferManager::Bdwrite(Buf* bp) {
+	bp->b_flags |= (Buf::B_DELWRI | Buf::B_DONE);
 	this->Brelse(bp);
 	return;
 }
