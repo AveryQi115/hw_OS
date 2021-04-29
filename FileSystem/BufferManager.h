@@ -19,32 +19,26 @@ public:
 	
 	Buf* GetBlk(int blkno);				/* 申请一块缓存，用于读写设备dev上的字符块blkno。*/
 	void Brelse(Buf* bp);				/* 释放缓存控制块buf */
-	void IOWait(Buf* bp);				/* 同步方式I/O，等待I/O操作结束 */
-	void IODone(Buf* bp);				/* I/O操作结束善后处理 */
 
 	Buf* Bread(int blkno);				/* 读一个磁盘块。dev为主、次设备号，blkno为目标磁盘块逻辑块号。 */
 
 	void Bwrite(Buf* bp);				/* 写一个磁盘块 */
 
-	void ClrBuf(Buf* bp);				/* 清空缓冲区内容 */
-	
-	Buf& GetBFreeList();				/* 获取自由缓存队列控制块Buf对象引用 */
+	void Bclear(Buf* bp);				/* 磁盘块全部清零 */
+
+	void Bflush();						/* 所有延迟写的缓存全部输出到磁盘 */
 
 private:
 	void insertHead(Buf* bp);
 	Buf* find(int blkno);
 	void detachNode(Buf* bp);
-
-	void GetError(Buf* bp);				/* 获取I/O操作中发生的错误信息 */
-	void NotAvail(Buf* bp);				/* 从自由队列中摘下指定的缓存控制块buf */
-	Buf* InCore(int blkno);				/* 检查指定字符块是否已在缓存中 */
 	
 private:
 	Buf* m_Buf_head;					/* 缓存控制块数组头结点 */
 	Buf m_Buf[NBUF];					/* 缓存控制块数组 */
 	unsigned char Buffer[NBUF][BUFFER_SIZE];	/* 缓冲区数组 */
 	
-	DiskDriver* m_DeviceDriver;		/* 指向设备驱动模块全局对象 */
+	DeviceDriver* m_DeviceDriver;		/* 指向设备驱动模块全局对象 */
 };
 
 #endif

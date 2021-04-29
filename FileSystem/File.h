@@ -16,7 +16,6 @@ public:
 	{
 		FREAD = 0x1,			/* 读请求类型 */
 		FWRITE = 0x2,			/* 写请求类型 */
-		FPIPE = 0x4				/* 管道类型 */
 	};
 	
 	/* Functions */
@@ -57,11 +56,6 @@ public:
 	 * @comment 进程请求打开文件时，在打开文件描述符表中分配一个空闲表项
 	 */
 	int AllocFreeSlot();
-	
-	/* 
-	 * @comment Dup系统调用时复制打开文件描述符表中的描述符
-	 */
-	int	Clone(int fd);
 	
 	/* 
 	 * @comment 根据用户系统调用提供的文件描述符参数fd，

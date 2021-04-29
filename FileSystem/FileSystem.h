@@ -2,11 +2,8 @@
 #define FILE_SYSTEM_H
 
 #include "Inode.h"
-#include "Buf.h"
+#include "DeviceDriver.h"
 #include "BufferManager.h"
-
-#define INODE_NUM 822
-#define BLOCK_NUM 18000
 
 /*
  * 文件系统存储资源管理块(Super Block)的定义。
@@ -40,30 +37,14 @@ public:
 	int		padding[47];	/* 填充使SuperBlock块大小等于1024字节，占据2个扇区 */
 };
 
-extern SuperBlock* g_spb;
+class DirectoryEntry {
+public:
+    static const int DIRSIZ = 28;	/* 目录项中路径部分的最大字符串长度 */
 
-/*
- * 文件系统装配块(Mount)的定义。
- * 装配块用于实现子文件系统与
- * 根文件系统的连接。
- */
-class Mount
-{
-	/* Functions */
 public:
-	/* Constructors */
-	Mount();
-	/* Destructors */
-	~Mount();
-	
-	/* Members */
-public:
-	short 		m_dev;		/* 文件系统设备号 */
-	SuperBlock* m_spb;		/* 指向文件系统的Super Block对象在内存中的副本 */
-	Inode*		m_inodep;	/* 指向挂载子文件系统的内存INode */
+    int m_ino;		    /* 目录项中INode编号部分 */
+    char name[DIRSIZ];	/* 目录项中路径名部分 */
 };
-
-
 
 /*
  * 文件系统类(FileSystem)管理文件存储设备中
@@ -75,92 +56,75 @@ public:
 // |...  |200-201   |202...1023|1024...		   17999|
 // |...  |superblock|inode     |数据区 				|
 // |-----|----------|----------|--------------------|
-class FileSystem
-{
+class FileSystem {
 public:
-	/* static consts */
-	static const int NMOUNT = 5;			/* 系统中用于挂载子文件系统的装配块数量 */
+    // Block块大小
+    static const int BLOCK_SIZE = 512;
 
-	static const int SUPER_BLOCK_SECTOR_NUMBER = 200;	/* 定义SuperBlock位于磁盘上的扇区号，占据200，201两个扇区。 */
+    // 磁盘所有扇区数量
+    static const int DISK_SIZE = 16384;
 
-	static const int ROOTINO = 1;			/* 文件系统根目录外存Inode编号 */
+    // 定义SuperBlock位于磁盘上的扇区号，占据两个扇区
+    static const int SUPERBLOCK_START_SECTOR = 0;
 
-	static const int INODE_NUMBER_PER_SECTOR = 8;		/* 外存INode对象长度为64字节，每个磁盘块可以存放512/64 = 8个外存Inode */
-	static const int INODE_ZONE_START_SECTOR = 202;		/* 外存Inode区位于磁盘上的起始扇区号 */
-	static const int INODE_ZONE_SIZE = 1024 - 202;		/* 磁盘上外存Inode区占据的扇区数 */
 
-	static const int DATA_ZONE_START_SECTOR = 1024;		/* 数据区的起始扇区号 */
-	static const int DATA_ZONE_END_SECTOR = 18000 - 1;	/* 数据区的结束扇区号 */
-	static const int DATA_ZONE_SIZE = 18000 - DATA_ZONE_START_SECTOR;	/* 数据区占据的扇区数量 */
+    // 外存INode区位于磁盘上的起始扇区号
+    static const int INODE_ZONE_START_SECTOR = 2;
 
-	/* Functions */
+    // 磁盘上外存INode区占据的扇区数
+    static const int INODE_ZONE_SIZE = 1022;
+
+    // 外存INode对象长度为64字节，每个磁盘块可以存放512/64 = 8个外存INode
+    static const int INODE_NUMBER_PER_SECTOR = BLOCK_SIZE / sizeof(DiskInode);
+
+    // 文件系统根目录外存INode编号
+    static const int ROOT_INODE_NO = 1;
+
+    // 外存INode的总个数:要填满扇区但是留出0号置空
+    static const int INode_NUMBERS = INODE_ZONE_SIZE * INODE_NUMBER_PER_SECTOR - ROOT_INODE_NO;
+
+
+    // 数据区的起始扇区号:1024
+    static const int DATA_ZONE_START_SECTOR = INODE_ZONE_START_SECTOR + INODE_ZONE_SIZE;
+
+    // 数据区的最后扇区号
+    static const int DATA_ZONE_END_SECTOR = DISK_SIZE - 1;
+
+    // 数据区占据的扇区数量
+    static const int DATA_ZONE_SIZE = DISK_SIZE - DATA_ZONE_START_SECTOR;
+
 public:
-	/* Constructors */
-	FileSystem();
-	/* Destructors */
-	~FileSystem();
+    DeviceDriver* deviceDriver;
+    SuperBlock* superBlock;
+	BufferManager* bufferManager;
 
-	/* 
-	 * @comment 初始化成员变量
-	 */
-	void Initialize();
-
-	/* 
-	* @comment 系统初始化时读入SuperBlock
-	*/
-	void LoadSuperBlock();
-
-	/* 
-	 * @comment 根据文件存储设备的设备号dev获取
-	 * 该文件系统的SuperBlock
-	 */
-	SuperBlock* GetFS(short dev);
-	/* 
-	 * @comment 将SuperBlock对象的内存副本更新到
-	 * 存储设备的SuperBlock中去
-	 */
-	void Update();
-
-	/* 
-	 * @comment  在存储设备dev上分配一个空闲
-	 * 外存INode，一般用于创建新的文件。
-	 */
-	Inode* IAlloc(short dev);
-	/* 
-	 * @comment  释放存储设备dev上编号为number
-	 * 的外存INode，一般用于删除文件。
-	 */
-	void IFree(short dev, int number);
-
-	/* 
-	 * @comment 在存储设备dev上分配空闲磁盘块
-	 */
-	Buf* Alloc(short dev);
-	/* 
-	 * @comment 释放存储设备dev上编号为blkno的磁盘块
-	 */
-	void Free(short dev, int blkno);
-
-	/* 
-	 * @comment 查找文件系统装配表，搜索指定Inode对应的Mount装配块
-	 */
-	Mount* GetMount(Inode* pInode);
-
-private:
-	/* 
-	 * @comment 检查设备dev上编号blkno的磁盘块是否属于
-	 * 数据盘块区
-	 */
-	bool BadBlock(SuperBlock* spb, short dev, int blkno);
-
-	/* Members */
 public:
-	Mount m_Mount[NMOUNT];		/* 文件系统装配块表，Mount[0]用于根文件系统 */
+    FileSystem();
+    ~FileSystem();
 
-private:
-	BufferManager* m_BufferManager;		/* FileSystem类需要缓存管理模块(BufferManager)提供的接口 */
-	int updlock;						/* Update()函数的锁，该函数用于同步内存各个SuperBlock副本以及，
-								被修改过的内存Inode。任一时刻只允许一个进程调用该函数 */
+	/* 格式化SuperBlock */
+    void FormatSuperBlock();
+
+	/* 格式化整个文件系统 */
+    void FormatDevice();
+
+    /* 系统初始化时读入SuperBlock */
+    void LoadSuperBlock();
+
+    /* 将SuperBlock对象的内存副本更新到存储设备的SuperBlock中去 */
+    void Update();
+
+    /* 在存储设备dev上分配一个空闲外存INode，一般用于创建新的文件。*/
+    INode* IAlloc();
+
+    /* 释放编号为number的外存INode，一般用于删除文件。*/
+    void IFree(int number);
+
+    /* 在存储设备上分配空闲磁盘块 */
+    Buffer* Alloc();
+
+    /* 释放存储设备dev上编号为blkno的磁盘块 */
+    void Free(int blkno);
+
 };
-
 #endif

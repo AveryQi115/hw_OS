@@ -1,6 +1,8 @@
 #include "File.h"
 #include "Utility.h"	//for NULL
-#include "Kernel.h"
+#include "User.h"
+
+extern User g_User;
 
 /*==============================class File===================================*/
 File::File()
@@ -19,6 +21,7 @@ File::~File()
 /*==============================class OpenFiles===================================*/
 OpenFiles::OpenFiles()
 {
+	memset(ProcessOpenFileTable,NULL,sizeof(ProcessOpenFileTable));
 }
 
 OpenFiles::~OpenFiles()
@@ -28,7 +31,7 @@ OpenFiles::~OpenFiles()
 int OpenFiles::AllocFreeSlot()
 {
 	int i;
-	User& u = Kernel::Instance().GetUser();
+	User& u = g_User;	//全局User对象
 	
 	for(i = 0; i < OpenFiles::NOFILES; i++)
 	{
@@ -46,15 +49,11 @@ int OpenFiles::AllocFreeSlot()
 	return -1;
 }
 
-int OpenFiles::Clone(int fd)
-{
-	return 0;
-}
-
+/* 根据用户系统调用提供的文件描述符参数fd，找到对应的打开文件控制块File结构 */
 File* OpenFiles::GetF(int fd)
 {
 	File* pFile;
-	User& u = Kernel::Instance().GetUser();
+	User& u = g_User;
 	
 	/* 如果打开文件描述符的值超出了范围 */
 	if(fd < 0 || fd >= OpenFiles::NOFILES)

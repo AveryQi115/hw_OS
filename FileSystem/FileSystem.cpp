@@ -1,10 +1,6 @@
 #include "FileSystem.h"
 #include "Utility.h"
-#include "New.h"
-#include "Kernel.h"
-#include "OpenFileManager.h"
-#include "TimeInterrupt.h"
-#include "Video.h"
+#include "User.h"
 
 /*==============================class SuperBlock===================================*/
 /* 系统全局超级块SuperBlock对象 */
@@ -20,493 +16,248 @@ SuperBlock::~SuperBlock()
 	//nothing to do here
 }
 
-/*==============================class Mount===================================*/
-Mount::Mount()
-{
-	this->m_dev = -1;
-	this->m_spb = NULL;
-	this->m_inodep = NULL;
-}
-
-Mount::~Mount()
-{
-	this->m_dev = -1;
-	this->m_inodep = NULL;
-	//释放内存SuperBlock副本
-	if(this->m_spb != NULL)
-	{
-		delete this->m_spb;
-		this->m_spb = NULL;
-	}
-}
+extern DeviceDriver g_DeviceDriver;
+extern BufferManager g_BufferManager;
+extern SuperBlock g_SuperBlock;
+extern InodeTable g_INodeTable;
+extern User g_User;
 
 /*==============================class FileSystem===================================*/
-FileSystem::FileSystem()
-{
-	//nothing to do here
+FileSystem::FileSystem() {
+    deviceDriver = &g_DeviceDriver;
+    superBlock = &g_SuperBlock;
+	bufferManager = &g_BufferManager;
+
+	// 如果镜像文件没有打开，格式化镜像文件
+    if (!deviceDriver->Exists()) {
+        FormatDevice();
+    }
+	// 打开了就加载superBlock
+    else {
+        LoadSuperBlock();
+    }
 }
 
-FileSystem::~FileSystem()
-{
-	//nothing to do here
+FileSystem::~FileSystem() {
+    Update();
+    deviceDriver = NULL;
+    superBlock = NULL;
 }
 
-void FileSystem::Initialize()
-{
-	this->m_BufferManager = &Kernel::Instance().GetBufferManager();
-	this->updlock = 0;
+/* 格式化SuperBlock */
+// 并没有生成空闲盘块表和空闲inode表
+void FileSystem::FormatSuperBlock() {
+    superBlock->s_isize = FileSystem::INODE_ZONE_SIZE;
+    superBlock->s_fsize = FileSystem::DISK_SIZE;
+    superBlock->s_nfree = 0;
+    superBlock->s_free[0] = -1;
+    superBlock->s_ninode = 0;
+    superBlock->s_flock = 0;
+    superBlock->s_ilock = 0;
+    superBlock->s_fmod = 0;
+    superBlock->s_ronly = 0;
+    time((time_t*)&superBlock->s_time);
 }
 
+/* 格式化整个文件系统 */
+void FileSystem::FormatDevice() {
+    FormatSuperBlock();
+	// 打开镜像文件
+    deviceDriver->Construct();
 
-void FileSystem::LoadSuperBlock()
-{
-	User& u = Kernel::Instance().GetUser();
-	BufferManager& bufMgr = Kernel::Instance().GetBufferManager();
-	Buf* pBuf;
+    //直接调用写磁盘函数，写入superblock
+    deviceDriver->write(superBlock, sizeof(SuperBlock), FileSystem::SUPERBLOCK_START_SECTOR*(FileSystem::BLOCK_SIZE));
 
-	// superBlock占据两个扇区
-	// 起始扇区号为FileSystem::SUPER_BLOCK_SECTOR_NUMBER
-	for (int i = 0; i < 2; i++)
-	{
-		int* p = (int *)g_spb + i * 128;
+    DiskInode emptyDINode, rootDINode;
+    
+	//根目录DiskNode标已分配和目录
+    rootDINode.d_mode |= Inode::IALLOC | Inode::IFDIR;
+    rootDINode.d_nlink = 1;
+    deviceDriver->write(&rootDINode, sizeof(rootDINode),FileSystem::INODE_ZONE_START_SECTOR*FileSystem::BLOCK_SIZE+FileSystem::ROOT_INODE_NO*sizeof(DiskInode));
+    
+    //从根目录之后开始初始化，初始化INode_NUMBERS个inode
+    for (int i = 1; i < FileSystem::INode_NUMBERS; ++i) {
+		// 填充空闲inode表
+        if (superBlock->s_ninode < 100) {
+            superBlock->s_inode[superBlock->s_ninode++] = i+FileSystem::ROOT_INODE_NO;
+        }
+		// offset不设置，依次填入
+        deviceDriver->write(&emptyDINode, sizeof(emptyDINode));
+    }
 
-		pBuf = bufMgr.Bread(DeviceManager::ROOTDEV, FileSystem::SUPER_BLOCK_SECTOR_NUMBER + i);
+    //空闲盘块初始化
+    char freeBlock[BLOCK_SIZE], freeBlock1[BLOCK_SIZE];
+    memset(freeBlock, 0, BLOCK_SIZE);
+    memset(freeBlock1, 0, BLOCK_SIZE);
 
-		// 外存读入的pBuf拷入内存g_spb中
-		Utility::DWordCopy((int *)pBuf->b_addr, p, 128);
+	// 依次填入DATA_ZONE_SIZE个扇区
+    for (int i = 0; i < FileSystem::DATA_ZONE_SIZE; ++i) {
+        if (superBlock->s_nfree >= 100) {
+			// 404个字节拷给freeBlock1，第1个是num，之后99个为空闲盘块号，最后一个是下一空闲表盘块号
+            memcpy(freeBlock1, &superBlock->s_nfree, sizeof(int) + sizeof(superBlock->s_free));
+            deviceDriver->write(&freeBlock1, BLOCK_SIZE);
+            superBlock->s_nfree = 0;
+        }
+        else {
+            deviceDriver->write(freeBlock, BLOCK_SIZE);
+        }
+		// 起始的盘块写作0代表没有下一个空闲盘块
+        superBlock->s_free[superBlock->s_nfree++] = DATA_ZONE_START_SECTOR ? 0 : i+DATA_ZONE_START_SECTOR;
+    }
 
-		bufMgr.Brelse(pBuf);
-	}
-	
-	if (User::NOERROR != u.u_error)
-	{
-		Utility::Panic("Load SuperBlock Error....!\n");
-	}
-
-	this->m_Mount[0].m_dev = DeviceManager::ROOTDEV;
-	this->m_Mount[0].m_spb = g_spb;
-
-	g_spb->s_flock = 0;
-	g_spb->s_ilock = 0;
-	g_spb->s_ronly = 0;
-	g_spb->s_time = Time::time;
+    time((time_t*)&superBlock->s_time);
+    //刷新superblock时间，写入空闲盘块表和空闲inode表
+    deviceDriver->write(superBlock, sizeof(SuperBlock), 0);
 }
 
-SuperBlock* FileSystem::GetFS(short dev)
-{
-	SuperBlock* sb;
-	
-	/* 遍历系统装配块表，寻找设备号为dev的设备中文件系统的SuperBlock */
-	for(int i = 0; i < FileSystem::NMOUNT; i++)
-	{
-		if(this->m_Mount[i].m_spb != NULL && this->m_Mount[i].m_dev == dev)
-		{
-			/* 获取SuperBlock的地址 */
-			sb = this->m_Mount[i].m_spb;
-			if(sb->s_nfree > 100 || sb->s_ninode > 100)
-			{
-				sb->s_nfree = 0;
-				sb->s_ninode = 0;
-			}
-			return sb;
-		}
-	}
-
-	Utility::Panic("No File System!");
-	return NULL;
+/* 系统初始化时读入SuperBlock */
+void FileSystem::LoadSuperBlock() {
+    deviceDriver->read(superBlock, sizeof(SuperBlock), SUPERBLOCK_START_SECTOR*BLOCK_SIZE);
 }
 
-void FileSystem::Update()
-{
-	int i;
-	SuperBlock* sb;
-	Buf* pBuf;
+// superblock刷入磁盘
+// 内存inodeTable刷入磁盘
+// 缓存区中所有延迟写的块刷入磁盘
+void FileSystem::Update() {
+	Buf* pBuffer;
+	superBlock->s_fmod = 0;
+    superBlock->s_time = (int)time(NULL);
+	for (int j = 0; j < 2; j++) {
+		int* p = (int *)superBlock + j * 128;
 
-	/* 另一进程正在进行同步，则直接返回 */
-	if(this->updlock)
-	{
-		return;
+		// 拿到对应缓存
+		pBuffer = this->bufferManager->GetBlk(FileSystem::SUPERBLOCK_START_SECTOR + j);
+		// 内存写入缓存
+		memcpy(pBuffer->addr, p, BLOCK_SIZE);
+
+		// 缓存写磁盘
+		this->bufferManager->Bwrite(pBuffer);
 	}
-
-	/* 设置Update()函数的互斥锁，防止其它进程重入 */
-	this->updlock++;
-
-	/* 同步SuperBlock到磁盘 */
-	for(i = 0; i < FileSystem::NMOUNT; i++)
-	{
-		if(this->m_Mount[i].m_spb != NULL)	/* 该Mount装配块对应某个文件系统 */
-		{
-			sb = this->m_Mount[i].m_spb;
-
-			/* 如果该SuperBlock内存副本没有被修改，直接管理inode和空闲盘块被上锁或该文件系统是只读文件系统 */
-			if(sb->s_fmod == 0 || sb->s_ilock != 0 || sb->s_flock != 0 || sb->s_ronly != 0)
-			{
-				continue;
-			}
-
-			/* 清SuperBlock修改标志 */
-			sb->s_fmod = 0;
-			/* 写入SuperBlock最后存访时间 */
-			sb->s_time = Time::time;
-
-			/* 
-			 * 为将要写回到磁盘上去的SuperBlock申请一块缓存，由于缓存块大小为512字节，
-			 * SuperBlock大小为1024字节，占据2个连续的扇区，所以需要2次写入操作。
-			 */
-			for(int j = 0; j < 2; j++)
-			{
-				/* 第一次p指向SuperBlock的第0字节，第二次p指向第512字节 */
-				int* p = (int *)sb + j * 128;
-
-				/* 将要写入到设备dev上的SUPER_BLOCK_SECTOR_NUMBER + j扇区中去 */
-				pBuf = this->m_BufferManager->GetBlk(this->m_Mount[i].m_dev, FileSystem::SUPER_BLOCK_SECTOR_NUMBER + j);
-
-				/* 将SuperBlock中第0 - 511字节写入缓存区 */
-				Utility::DWordCopy(p, (int *)pBuf->b_addr, 128);
-
-				/* 将缓冲区中的数据写到磁盘上 */
-				this->m_BufferManager->Bwrite(pBuf);
-			}
-		}
-	}
-	
-	/* 同步修改过的内存Inode到对应外存Inode */
-	g_InodeTable.UpdateInodeTable();
-
-	/* 清除Update()函数锁 */
-	this->updlock = 0;
-
-	/* 将延迟写的缓存块写到磁盘上 */
-	this->m_BufferManager->Bflush(DeviceManager::NODEV);
+	// 内存inodeTable写磁盘
+	g_INodeTable.UpdateINodeTable();
+	// 缓存所有延迟写的缓存块刷入磁盘
+	this->bufferManager->Bflush();
 }
 
-// 分配空闲inode
-// s_ninode代表当前空闲inode表中的空闲inode数，也是空闲inode表栈顶
-// 如果s_ninode<=0会重新搜索inode区，填补空闲inode表
-Inode* FileSystem::IAlloc(short dev)
-{
-	SuperBlock* sb;
-	Buf* pBuf;
-	Inode* pNode;
-	User& u = Kernel::Instance().GetUser();
-	int ino;	/* 分配到的空闲外存Inode编号 */
+/* 在存储设备上分配空闲磁盘块 */
+Buf* FileSystem::Alloc() {
+	int blkno;
+	Buf* pBuffer;
+	User& u = g_User;
 
-	/* 获取相应设备的SuperBlock内存副本 */
-	sb = this->GetFS(dev);
+    /* 从索引表“栈顶”获取空闲磁盘块编号 */
+	blkno = superBlock->s_free[--superBlock->s_nfree];
 
-	/* 如果SuperBlock空闲Inode表被上锁，则睡眠等待至解锁 */
-	while(sb->s_ilock)
-	{
-		Diagnose::Write("FileSystem::IAlloc, Sleep...");
-		//u.u_procp->Sleep((unsigned long)&sb->s_ilock, ProcessManager::PINOD);
-	}
-
-	/* 
-	 * SuperBlock直接管理的空闲Inode索引表已空，
-	 * 必须到磁盘上搜索空闲Inode。先对inode列表上锁，
-	 * 因为在以下程序中会进行读盘操作可能会导致进程切换，
-	 * 其他进程有可能访问该索引表，将会导致不一致性。
-	 */
-	if(sb->s_ninode <= 0)
-	{
-		/* 空闲Inode索引表上锁 */
-		sb->s_ilock++;
-
-		/* 外存Inode编号从1开始编号 */
-		ino = 0;
-
-		/* 依次读入磁盘Inode区中的磁盘块，搜索其中空闲外存Inode，记入空闲Inode索引表 */
-		for(int i = 0; i < sb->s_isize; i++)
-		{
-			pBuf = this->m_BufferManager->Bread(dev, FileSystem::INODE_ZONE_START_SECTOR + i);
-
-			/* 获取缓冲区首址 */
-			int* p = (int *)pBuf->b_addr;
-
-			/* 检查该缓冲区中每个外存Inode的i_mode != 0，表示已经被占用 */
-			for(int j = 0; j < FileSystem::INODE_NUMBER_PER_SECTOR; j++)
-			{
-				ino++;
-
-				int mode = *( p + j * sizeof(DiskInode)/sizeof(int) );
-
-				/* 该外存Inode已被占用，不能记入空闲Inode索引表 */
-				if(mode != 0)
-				{
-					continue;
-				}
-
-				/* 
-				 * 如果外存inode的i_mode==0，此时并不能确定
-				 * 该inode是空闲的，因为有可能是内存inode没有写到
-				 * 磁盘上,所以要继续搜索内存inode中是否有相应的项
-				 */
-				if( g_InodeTable.IsLoaded(dev, ino) == -1 )
-				{
-					/* 该外存Inode没有对应的内存拷贝，将其记入空闲Inode索引表 */
-					sb->s_inode[sb->s_ninode++] = ino;
-
-					/* 如果空闲索引表已经装满，则不继续搜索 */
-					if(sb->s_ninode >= 100)
-					{
-						break;
-					}
-				}
-			}
-
-			/* 至此已读完当前磁盘块，释放相应的缓存 */
-			this->m_BufferManager->Brelse(pBuf);
-
-			/* 如果空闲索引表已经装满，则不继续搜索 */
-			if(sb->s_ninode >= 100)
-			{
-				break;
-			}
-		}
-		/* 解除对空闲外存Inode索引表的锁，唤醒因为等待锁而睡眠的进程 */
-		sb->s_ilock = 0;
-		//Kernel::Instance().GetProcessManager().WakeUpAll((unsigned long)&sb->s_ilock);
-		
-		/* 如果在磁盘上没有搜索到任何可用外存Inode，返回NULL */
-		if(sb->s_ninode <= 0)
-		{
-			Diagnose::Write("No Space On %d !\n", dev);
-			u.u_error = User::ENOSPC;
-			return NULL;
-		}
-	}
-
-	/* 
-	 * 上面部分已经保证，除非系统中没有可用外存Inode，
-	 * 否则空闲Inode索引表中必定会记录可用外存Inode的编号。
-	 */
-	while(true)
-	{
-		/* 从索引表“栈顶”获取空闲外存Inode编号 */
-		ino = sb->s_inode[--sb->s_ninode];
-
-		/* 将空闲Inode读入内存 */
-		pNode = g_InodeTable.IGet(dev, ino);
-		/* 未能分配到内存inode */
-		if(NULL == pNode)
-		{
-			return NULL;
-		}
-
-		/* 如果该Inode空闲,清空Inode中的数据 */
-		if(0 == pNode->i_mode)
-		{
-			pNode->Clean();
-			/* 设置SuperBlock被修改标志 */
-			sb->s_fmod = 1;
-			return pNode;
-		}
-		else	/* 如果该Inode已被占用 */
-		{
-			g_InodeTable.IPut(pNode);
-			continue;	/* while循环 */
-		}
-	}
-	return NULL;	/* GCC likes it! */
-}
-
-void FileSystem::IFree(short dev, int number)
-{
-	SuperBlock* sb;
-
-	sb = this->GetFS(dev);	/* 获取相应设备的SuperBlock内存副本 */
-	
-	/* 
-	 * 如果超级块直接管理的空闲Inode表上锁，
-	 * 则释放的外存Inode散落在磁盘Inode区中。
-	 */
-	if(sb->s_ilock)
-	{
-		return;
-	}
-
-	/* 
-	 * 如果超级块直接管理的空闲外存Inode超过100个，
-	 * 同样让释放的外存Inode散落在磁盘Inode区中。
-	 */
-	if(sb->s_ninode >= 100)
-	{
-		return;
-	}
-
-	sb->s_inode[sb->s_ninode++] = number;
-
-	/* 设置SuperBlock被修改标志 */
-	sb->s_fmod = 1;
-}
-
-Buf* FileSystem::Alloc(short dev)
-{
-	int blkno;	/* 分配到的空闲磁盘块编号 */
-	SuperBlock* sb;
-	Buf* pBuf;
-	User& u = Kernel::Instance().GetUser();
-
-	/* 获取SuperBlock对象的内存副本 */
-	sb = this->GetFS(dev);
-
-	/* 
-	 * 如果空闲磁盘块索引表正在被上锁，表明有其它进程
-	 * 正在操作空闲磁盘块索引表，因而对其上锁。这通常
-	 * 是由于其余进程调用Free()或Alloc()造成的。
-	 */
-	while(sb->s_flock)
-	{
-		/* 进入睡眠直到获得该锁才继续 */
-		Diagnose::Write("FileSystem::Alloc, Sleep...");
-		//u.u_procp->Sleep((unsigned long)&sb->s_flock, ProcessManager::PINOD);
-	}
-
-	/* 从索引表“栈顶”获取空闲磁盘块编号 */
-	blkno = sb->s_free[--sb->s_nfree];
-
-	/* 
-	 * 若获取磁盘块编号为零，则表示已分配尽所有的空闲磁盘块。
-	 * 或者分配到的空闲磁盘块编号不属于数据盘块区域中(由BadBlock()检查)，
-	 * 都意味着分配空闲磁盘块操作失败。
-	 */
-	if(0 == blkno )
-	{
-		sb->s_nfree = 0;
-		Diagnose::Write("No Space On %d !\n", dev);
+    /* 若获取磁盘块编号为零，则表示已分配尽所有的空闲磁盘块。*/
+	if (blkno <= 0) {
+		superBlock->s_nfree = 0;
 		u.u_error = User::ENOSPC;
 		return NULL;
 	}
-	if( this->BadBlock(sb, dev, blkno) )
-	{
-		return NULL;
+
+	/*
+	* 栈已空，新分配到空闲磁盘块中记录了下一组空闲磁盘块的编号
+	* 将下一组空闲磁盘块的编号读入SuperBlock的空闲磁盘块索引表s_free[100]中。
+	*/
+    if (superBlock->s_nfree <= 0) {
+		pBuffer = this->bufferManager->Bread(blkno);
+		int* p = (int *)pBuffer->addr;
+		superBlock->s_nfree = *p++;
+		memcpy(superBlock->s_free, p, sizeof(superBlock->s_free));
+		this->bufferManager->Brelse(pBuffer);
+	}
+	pBuffer = this->bufferManager->GetBlk(blkno);
+	if (pBuffer) {
+		this->bufferManager->Bclear(pBuffer);
 	}
 
-	/* 
-	 * 栈已空，新分配到空闲磁盘块中记录了下一组空闲磁盘块的编号,
-	 * 将下一组空闲磁盘块的编号读入SuperBlock的空闲磁盘块索引表s_free[100]中。
-	 */
-	if(sb->s_nfree <= 0)
-	{
-		/* 
-		 * 此处加锁，因为以下要进行读盘操作，有可能发生进程切换，
-		 * 新上台的进程可能对SuperBlock的空闲盘块索引表访问，会导致不一致性。
-		 */
-		sb->s_flock++;
-
-		/* 读入该空闲磁盘块 */
-		pBuf = this->m_BufferManager->Bread(dev, blkno);
-
-		/* 从该磁盘块的0字节开始记录，共占据4(s_nfree)+400(s_free[100])个字节 */
-		int* p = (int *)pBuf->b_addr;
-
-		/* 首先读出空闲盘块数s_nfree */
-		sb->s_nfree = *p++;
-
-		/* 读取缓存中后续位置的数据，写入到SuperBlock空闲盘块索引表s_free[100]中 */
-		Utility::DWordCopy(p, sb->s_free, 100);
-
-		/* 缓存使用完毕，释放以便被其它进程使用 */
-		this->m_BufferManager->Brelse(pBuf);
-
-		/* 解除对空闲磁盘块索引表的锁，唤醒因为等待锁而睡眠的进程 */
-		sb->s_flock = 0;
-		//Kernel::Instance().GetProcessManager().WakeUpAll((unsigned long)&sb->s_flock);
-	}
-
-	/* 普通情况下成功分配到一空闲磁盘块 */
-	pBuf = this->m_BufferManager->GetBlk(dev, blkno);	/* 为该磁盘块申请缓存 */
-	this->m_BufferManager->ClrBuf(pBuf);	/* 清空缓存中的数据 */
-	sb->s_fmod = 1;	/* 设置SuperBlock被修改标志 */
-
-	return pBuf;
+	// 更新了superBlock
+	superBlock->s_fmod = 1;
+	return pBuffer;
 }
 
-void FileSystem::Free(short dev, int blkno)
-{
-	SuperBlock* sb;
-	Buf* pBuf;
-	User& u = Kernel::Instance().GetUser();
+/* 在存储设备dev上分配一个空闲外存INode，一般用于创建新的文件。*/
+Inode* FileSystem::IAlloc() {
+    Buf* pBuffer;
+    Inode* pINode;
+    User& u = g_User;
+    int ino;
 
-	sb = this->GetFS(dev);
+    /* SuperBlock直接管理的空闲Inode索引表已空，必须到磁盘上搜索空闲Inode。*/
+    if (superBlock->s_ninode <= 0) {
+        ino = -1;
+        for (int i = 0; i < superBlock->s_isize; ++i) {
+            pBuffer = this->bufferManager->Bread(FileSystem::INODE_ZONE_START_SECTOR + i);
+            int* p = (int*)pBuffer->addr;
+            for (int j = 0; j < FileSystem::INODE_NUMBER_PER_SECTOR; ++j) {
+                ++ino;
+                int mode = *(p + j * sizeof(DiskInode) / sizeof(int));
 
-	/* 
-	 * 尽早设置SuperBlock被修改标志，以防止在释放
-	 * 磁盘块Free()执行过程中，对SuperBlock内存副本
-	 * 的修改仅进行了一半，就更新到磁盘SuperBlock去
-	 */
-	sb->s_fmod = 1;
+				// 0号inode永远不用
+                if (mode || i*FileSystem::INODE_NUMBER_PER_SECTOR+j < FileSystem::ROOT_INODE_NO) {
+                    continue;
+                }
 
-	/* 如果空闲磁盘块索引表被上锁，则睡眠等待解锁 */
-	while(sb->s_flock)
-	{
-		Diagnose::Write("FileSystem::Free, Sleep...");
-		//u.u_procp->Sleep((unsigned long)&sb->s_flock, ProcessManager::PINOD);
-	}
+                /*
+                * 如果外存inode的i_mode==0，此时并不能确定该inode是空闲的，
+                * 因为有可能是内存inode没有写到磁盘上,所以要继续搜索内存inode中是否有相应的项
+                */
+                if (g_INodeTable.IsLoaded(ino) == -1) {
+                    superBlock->s_inode[superBlock->s_ninode++] = ino;
+                    if (superBlock->s_ninode >= 100) {
+                        break;
+                    }
+                }
+            }
 
-	/* 检查释放磁盘块的合法性 */
-	if(this->BadBlock(sb, dev, blkno))
-	{
-		return;
-	}
+            this->bufferManager->Brelse(pBuffer);
+            if (superBlock->s_ninode >= SuperBlock::MAX_NINODE) {
+                break;
+            }
+        }
+        if (superBlock->s_ninode <= 0) {
+            u.u_error = User::ENOSPC;
+            return NULL;
+        }
+    }
 
-	/* 
-	 * 如果先前系统中已经没有空闲盘块，
-	 * 现在释放的是系统中第1块空闲盘块
-	 */
-	if(sb->s_nfree <= 0)
-	{
-		sb->s_nfree = 1;
-		sb->s_free[0] = 0;	/* 使用0标记空闲盘块链结束标志 */
-	}
-
-	/* SuperBlock中直接管理空闲磁盘块号的栈已满 */
-	if(sb->s_nfree >= 100)
-	{
-		sb->s_flock++;
-
-		/* 
-		 * 使用当前Free()函数正要释放的磁盘块，存放前一组100个空闲
-		 * 磁盘块的索引表
-		 */
-		pBuf = this->m_BufferManager->GetBlk(dev, blkno);	/* 为当前正要释放的磁盘块分配缓存 */
-
-		/* 从该磁盘块的0字节开始记录，共占据4(s_nfree)+400(s_free[100])个字节 */
-		int* p = (int *)pBuf->b_addr;
-		
-		/* 首先写入空闲盘块数，除了第一组为99块，后续每组都是100块 */
-		*p++ = sb->s_nfree;
-		/* 将SuperBlock的空闲盘块索引表s_free[100]写入缓存中后续位置 */
-		Utility::DWordCopy(sb->s_free, p, 100);
-
-		sb->s_nfree = 0;
-		/* 将存放空闲盘块索引表的“当前释放盘块”写入磁盘，即实现了空闲盘块记录空闲盘块号的目标 */
-		this->m_BufferManager->Bwrite(pBuf);
-
-		sb->s_flock = 0;
-		//Kernel::Instance().GetProcessManager().WakeUpAll((unsigned long)&sb->s_flock);
-	}
-	sb->s_free[sb->s_nfree++] = blkno;	/* SuperBlock中记录下当前释放盘块号 */
-	sb->s_fmod = 1;
+    ino = superBlock->s_inode[--superBlock->s_ninode];
+    pINode = g_INodeTable.IGet(ino);
+    if (NULL == pINode) {
+        cout << "无空闲内存INode" << endl;
+        return NULL;
+    }
+    
+    // 清diskInode原有属性
+    pINode->Clean();
+    superBlock->s_fmod = 1;
+    return pINode;
 }
 
-Mount* FileSystem::GetMount(Inode *pInode)
-{
-	/* 遍历系统的装配块表 */
-	for(int i = 0; i <= FileSystem::NMOUNT; i++)
-	{
-		Mount* pMount = &(this->m_Mount[i]);
-
-		/* 找到内存Inode对应的Mount装配块 */
-		if(pMount->m_inodep == pInode)
-		{
-			return pMount;
-		}
+/* 释放编号为number的外存INode，一般用于删除文件。*/
+// TODO:不用清0吗？
+void FileSystem::IFree(int number) {
+	if (superBlock->s_ninode >= 100) {
+		return ;
 	}
-	return NULL;	/* 查找失败 */
+	superBlock->s_inode[superBlock->s_ninode++] = number;
+	superBlock->s_fmod = 1;
 }
 
-bool FileSystem::BadBlock(SuperBlock *spb, short dev, int blkno)
-{
-	return 0;
+/* 释放存储设备dev上编号为blkno的磁盘块 */
+void FileSystem::Free(int blkno) {
+	Buf* pBuffer;
+	User& u = g_User;
+
+	if (superBlock->s_nfree >=100 ) {
+		pBuffer = this->bufferManager->GetBlk(blkno);
+		int *p = (int*)pBuffer->addr;
+		*p++ = superBlock->s_nfree;
+		memcpy(p, superBlock->s_free, sizeof(int)*100);
+		superBlock->s_nfree = 0;
+		this->bufferManager->Bwrite(pBuffer);
+	}
+
+	superBlock->s_free[superBlock->s_nfree++] = blkno;
+	superBlock->s_fmod = 1;
 }
