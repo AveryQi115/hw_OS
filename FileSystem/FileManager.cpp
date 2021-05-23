@@ -56,6 +56,10 @@ void FileManager::Creat()
 
 	/* 搜索目录的模式为1，表示创建；若父目录不可写，出错返回 */
 	pInode = this->NameI(FileManager::CREATE);
+	cout<<"after NameI"<<endl;
+	if (pInode!=NULL){
+		pInode->debug();
+	}
 
 	/* 没有找到相应的Inode，或NameI出错 */
 	if ( NULL == pInode )
@@ -64,6 +68,11 @@ void FileManager::Creat()
 			return;
 		/* 创建Inode */
 		pInode = this->MakNode(newACCMode);
+		cout<<"after MakNode"<<endl;
+		if (pInode!=NULL){
+			pInode->debug();
+		}
+
 		/* 创建失败 */
 		if ( NULL == pInode )
 		{

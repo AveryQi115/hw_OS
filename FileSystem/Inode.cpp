@@ -164,7 +164,8 @@ void Inode::WriteI()
 		}
 
 		/* 将缓存标记为延迟写，不急于进行I/O操作将字符块输出到磁盘上 */
-		bufMgr.Bdwrite(pBuf);
+		//TODO:立刻写
+		bufMgr.Bwrite(pBuf);
 
 		/* 普通文件长度增加 */
 		if(this->i_size < u.u_IOParam.m_Offset)
