@@ -2,6 +2,15 @@
 #include "Utility.h"
 #include "User.h"
 
+/*==============================class DirectoryEntry===================================*/
+void DirectoryEntry::debug(){
+    cout<<"name: "<<name<<endl;
+    cout<<"inode_num:"<<m_ino<<endl;
+}
+
+
+
+
 /*==============================class SuperBlock===================================*/
 /* 系统全局超级块SuperBlock对象 */
 SuperBlock* g_spb;
@@ -48,6 +57,7 @@ FileSystem::FileSystem() {
 }
 
 FileSystem::~FileSystem() {
+    cout<<"~FileSystem"<<endl;
     Update();
     deviceDriver = NULL;
     superBlock = NULL;
@@ -100,7 +110,7 @@ void FileSystem::FormatDevice() {
     memset(freeBlock1, 0, BLOCK_SIZE);
 
 	// 依次填入DATA_ZONE_SIZE个扇区
-    for (int i = 0; i < FileSystem::DATA_ZONE_SIZE; ++i) {
+    for (int i = 0; i <= FileSystem::DATA_ZONE_SIZE; ++i) {
         if (superBlock->s_nfree >= 100) {
 			// 404个字节拷给freeBlock1，第1个是num，之后99个为空闲盘块号，最后一个是下一空闲表盘块号
             memcpy(freeBlock1, &superBlock->s_nfree, sizeof(int) + sizeof(superBlock->s_free));
@@ -111,7 +121,7 @@ void FileSystem::FormatDevice() {
             deviceDriver->write(freeBlock, BLOCK_SIZE);
         }
 		// 起始的盘块写作0代表没有下一个空闲盘块
-        superBlock->s_free[superBlock->s_nfree++] = DATA_ZONE_START_SECTOR ? 0 : i+DATA_ZONE_START_SECTOR;
+        superBlock->s_free[superBlock->s_nfree++] = (i==0) ? 0 : i+DATA_ZONE_START_SECTOR-1;
     }
 
     time((time_t*)&superBlock->s_time);

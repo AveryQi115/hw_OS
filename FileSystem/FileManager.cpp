@@ -193,7 +193,7 @@ Inode* FileManager::NameI( enum DirectorySearchMode mode )
 			/* 没有读完当前目录项盘块，则读取下一目录项至u.u_dent */
             memcpy(&u.u_dent, pBuf->b_addr + (u.u_IOParam.m_Offset % Inode::BLOCK_SIZE), sizeof(u.u_dent));
 
-			u.u_IOParam.m_Offset += DirectoryEntry::DIRSIZ;
+			u.u_IOParam.m_Offset += DirectoryEntry::DIRSIZ + 4;
 			u.u_IOParam.m_Count--;
 
 			/* 如果是空闲目录项，记录该项位于目录文件中偏移量 */
@@ -315,13 +315,14 @@ Inode* FileManager::MakNode( unsigned int mode )
 
 	/* 将目录项写入u.u_dent，随后写入目录文件 */
 	this->WriteDir(pInode);
+
 	return pInode;
 }
 
-/* 由creat子子调用。
+/* 由creat调用。
  * 把属于自己的目录项写进父目录，修改父目录文件的i节点 、将其写回磁盘。
  */
-void FileManager::WriteDir(Inode* pInode )
+void FileManager::WriteDir(Inode* pInode)
 {
 	User& u = g_User;
 
@@ -364,12 +365,16 @@ void FileManager::UnLink()
 	User& u = g_User;
 
 	pDeleteInode = this->NameI(FileManager::DELETE);
+	pDeleteInode->debug();
+
 	if ( NULL == pDeleteInode )
 	{
 		return;
 	}
 
 	pInode = this->m_InodeTable->IGet(u.u_dent.m_ino);
+	pInode->debug();
+	
 	if ( NULL == pInode )
 	{
 		return;
@@ -485,6 +490,7 @@ void FileManager::Ls() {
     BufferManager& bufferManager = g_BufferManager;
 
     Inode* pInode = u.u_cdir;
+
     Buf* pBuffer = NULL;
 
 	// 当前盘块总目录项数

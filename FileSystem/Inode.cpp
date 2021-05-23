@@ -514,6 +514,12 @@ void Inode::ICopy(Buf *bp, int inumber)
 void Inode::debug(){
 	cout << "disk inumber: "<<i_number<<endl;
 	cout << "file size: "<<i_size<<endl;
+	cout << "i_count: "<<i_count<<endl;
+	cout << "i_nlink: "<<i_nlink<<endl;
+	cout << "索引表:"<<endl;
+	for(int i=0;i<10;i++){
+		cout<<i_addr[i]<<endl;
+	}
 }
 
 

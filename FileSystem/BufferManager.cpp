@@ -13,6 +13,7 @@ BufferManager::BufferManager()
 BufferManager::~BufferManager()
 {
 	//nothing to do here
+	cout<<"~BufferManager"<<endl;
 	Bflush();
     delete m_Buf_head;
 }
@@ -158,7 +159,7 @@ void BufferManager::Bclear(Buf *bp) {
 void BufferManager::Bflush(){
 	Buf* pb = nullptr;
 	for(int i=0;i<NBUF;i++){
-		pb = m_Buf;
+		pb = &m_Buf[i];
 		if(pb->b_flags & Buf::B_DELWRI){
 			pb->b_flags &= ~(Buf::B_DELWRI);
 			m_DeviceDriver->write(pb->b_addr,BUFFER_SIZE,pb->b_blkno*BUFFER_SIZE);

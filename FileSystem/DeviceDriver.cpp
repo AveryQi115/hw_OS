@@ -7,6 +7,7 @@ DeviceDriver::DeviceDriver() {
 }
 
 DeviceDriver::~DeviceDriver() {
+    cout<<"~DeviceManager"<<endl;
     if (fp) {
         fclose(fp);
     }

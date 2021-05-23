@@ -29,6 +29,13 @@ Utility.o: Utility.cpp
 	$(CC) $(CXX_FLAGS) -c -o $@ $<
 	
 .phony:
+
+test:testDisk
+
+testDisk:ReadDiskTest.cpp DeviceDriver.cpp
+	$(CC) $(CXX_FLAGS) -o $@ $^
+
+
 clean:
 	rm -f *.o $(BIN)
 	rm -f *.img
