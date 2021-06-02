@@ -56,10 +56,10 @@ void FileManager::Creat()
 
 	/* 搜索目录的模式为1，表示创建；若父目录不可写，出错返回 */
 	pInode = this->NameI(FileManager::CREATE);
-	cout<<"after NameI"<<endl;
-	if (pInode!=NULL){
-		pInode->debug();
-	}
+	// cout<<"after NameI"<<endl;
+	// if (pInode!=NULL){
+	// 	pInode->debug();
+	// }
 
 	/* 没有找到相应的Inode，或NameI出错 */
 	if ( NULL == pInode )
@@ -68,10 +68,10 @@ void FileManager::Creat()
 			return;
 		/* 创建Inode */
 		pInode = this->MakNode(newACCMode);
-		cout<<"after MakNode"<<endl;
-		if (pInode!=NULL){
-			pInode->debug();
-		}
+		// cout<<"after MakNode"<<endl;
+		// if (pInode!=NULL){
+		// 	pInode->debug();
+		// }
 
 		/* 创建失败 */
 		if ( NULL == pInode )
@@ -149,7 +149,7 @@ Inode* FileManager::NameI( enum DirectorySearchMode mode )
 		/* 内层循环部分对于u.u_dbuf[]中的路径名分量，逐个搜寻匹配的目录项 */
 		u.u_IOParam.m_Offset = 0;
 		/* 设置为目录项个数 ，含空白的目录项*/
-		u.u_IOParam.m_Count = pInode->i_size / DirectoryEntry::DIRSIZ;
+		u.u_IOParam.m_Count = pInode->i_size / (DirectoryEntry::DIRSIZ+4);
 		freeEntryOffset = 0;
 		pBuf = NULL;
 
@@ -172,7 +172,7 @@ Inode* FileManager::NameI( enum DirectorySearchMode mode )
 					if ( freeEntryOffset )	/* 此变量存放了空闲目录项位于目录文件中的偏移量 */
 					{
 						/* 将空闲目录项偏移量存入u区中，写目录项WriteDir()会用到 */
-						u.u_IOParam.m_Offset = freeEntryOffset - DirectoryEntry::DIRSIZ;
+						u.u_IOParam.m_Offset = freeEntryOffset - (DirectoryEntry::DIRSIZ+4);
 					}
 					else  /*问题：为何if分支没有置IUPD标志？  这是因为文件的长度没有变呀*/
 					{
@@ -216,7 +216,7 @@ Inode* FileManager::NameI( enum DirectorySearchMode mode )
 				continue;
 			}
 
-			if (!memcmp(u.u_dbuf, &u.u_dent.name, sizeof(DirectoryEntry) - 4)) {
+			if (!memcmp(u.u_dbuf, &u.u_dent.name, DirectoryEntry::DIRSIZ)) {
                 break;
             }
 			
@@ -344,7 +344,14 @@ void FileManager::WriteDir(Inode* pInode)
 	u.u_IOParam.m_Count = DirectoryEntry::DIRSIZ + 4;
 	u.u_IOParam.m_Base = (unsigned char *)&u.u_dent;
 
+
+
 	/* 将目录项写入父目录文件 */
+	if (u.u_IOParam.m_Offset < u.u_pdir->i_size){
+		u.u_pdir->i_size += DirectoryEntry::DIRSIZ+4;
+	}
+
+	// WriteI是写文件的通用函数，只有当写入后offset超过原文件大小时才会更新文件size
 	u.u_pdir->WriteI();
 	this->m_InodeTable->IPut(u.u_pdir);
 }
@@ -374,7 +381,7 @@ void FileManager::UnLink()
 	User& u = g_User;
 
 	pDeleteInode = this->NameI(FileManager::DELETE);
-	pDeleteInode->debug();
+	// pDeleteInode->debug();
 
 	if ( NULL == pDeleteInode )
 	{
@@ -382,7 +389,7 @@ void FileManager::UnLink()
 	}
 
 	pInode = this->m_InodeTable->IGet(u.u_dent.m_ino);
-	pInode->debug();
+	// pInode->debug();
 	
 	if ( NULL == pInode )
 	{
@@ -395,11 +402,16 @@ void FileManager::UnLink()
 	u.u_IOParam.m_Count = DirectoryEntry::DIRSIZ + 4;
 	
 	u.u_dent.m_ino = 0;
+	memcpy(u.u_dent.name,"",sizeof(char)*DirectoryEntry::DIRSIZ);
 	pDeleteInode->WriteI();
 
 	/* 修改inode项 */
 	pInode->i_nlink--;
 	pInode->i_flag |= Inode::IUPD;
+
+	if (0 == pInode->i_nlink){
+		pDeleteInode->i_size -= (DirectoryEntry::DIRSIZ + 4);
+	}
 
 	this->m_InodeTable->IPut(pDeleteInode);
 	this->m_InodeTable->IPut(pInode);
@@ -517,12 +529,12 @@ void FileManager::Ls() {
         }
         memcpy(&u.u_dent, pBuffer->b_addr + (u.u_IOParam.m_Offset % Inode::BLOCK_SIZE), sizeof(u.u_dent));
         u.u_IOParam.m_Offset += sizeof(DirectoryEntry);
-        u.u_IOParam.m_Count--;
 
 		// 遇到空目录项则继续
         if (0 == u.u_dent.m_ino)
             continue;
 
+		u.u_IOParam.m_Count--;
         u.ls += u.u_dent.name;
         u.ls += "\n";
     }

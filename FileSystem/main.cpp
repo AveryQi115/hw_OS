@@ -223,16 +223,6 @@ void man(string command) {
 bool autoTest(string& cmd) {
     static int testNo = 0;
     static char* testCmds[] = {
-        //"ls",
-        //"cd dir1",
-        //"cd /",
-        //"cd dir1/dir11",
-        //"ls",
-        //"cd ../dir11/dir111",
-        //"ls",
-        //"cd /",
-        //"ls",
-
         "mkdir /dir1",
         "mkdir dir2",
         "create file1 -rw",
@@ -355,7 +345,7 @@ int main() {
             user->Write(arg1, arg2, arg3);
         }
         else if (cmd != "") {
-            cout << "shell : " << cmd << " : don't find this commond \n";
+            cout << "shell : " << cmd << " : don't find this command \n";
         }
 
     NEXT_INPUT:
