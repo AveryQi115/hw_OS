@@ -185,6 +185,28 @@ void man(string command) {
         "Error Avoided :  文件描述符不存在或超出范围，未正确指定参数 \n"
         ;
 
+    static string copy = 
+        "Command       :  copy -复制文件或文件夹 \n"
+        "Description   :  类Unix|Linux函数copy -r，复制文件或文件夹。 \n"
+        "Usage         :  cp <srcFile> <destPath> \n"
+        "Parameter     :  <srcFile> 待复制的源文件或文件夹 \n"
+        "                 <destPath> 复制操作的目标路径 \n"
+        "Usage Demo    :  cp /home/432 /home/371 \n"
+        "                 cp /home/432/test.txt /home/371 \n"
+        "Error Avoided :  需要有文件夹的读写权限 \n"
+        ;
+
+    static string move = 
+        "Command       :  mv -移动文件或文件夹 \n"
+        "Description   :  类Unix|Linux函数mv，移动文件或文件夹。 \n"
+        "Usage         :  mv <srcFile> <destPath> \n"
+        "Parameter     :  <srcFile> 待移动的源文件或文件夹 \n"
+        "                 <destPath> 移动操作的目标路径 \n"
+        "Usage Demo    :  mv /home/432 /home/371 \n"
+        "                 mv /home/432/test.txt /home/371 \n"
+        "Error Avoided :  需要有文件夹的读写权限 \n"
+        ;
+
     static string autoTest =
         "Command       :  autoTest -自动测试 \n"
         "Description   :  帮助测试，在系统启动初期帮助测试。测试不一定所有命令都是正确的，但是系统具有容错性，\n"
@@ -223,16 +245,6 @@ void man(string command) {
 bool autoTest(string& cmd) {
     static int testNo = 0;
     static char* testCmds[] = {
-        //"ls",
-        //"cd dir1",
-        //"cd /",
-        //"cd dir1/dir11",
-        //"ls",
-        //"cd ../dir11/dir111",
-        //"ls",
-        //"cd /",
-        //"ls",
-
         "mkdir /dir1",
         "mkdir dir2",
         "create file1 -rw",
@@ -292,7 +304,7 @@ int main() {
     vector<string> args;
     string cmd, arg1, arg2, arg3;
     int autoFlag = 0;
-    cout << "++++++++++++++++++++ Unix文件系统模拟 ++++++++++++++++++++" << endl;
+    // cout << "++++++++++++++++++++ Unix文件系统模拟 ++++++++++++++++++++" << endl;
 
     while (1) {
         if (line == "")
@@ -354,12 +366,21 @@ int main() {
         else if (cmd == "write") {
             user->Write(arg1, arg2, arg3);
         }
+        else if (cmd == "cp") {
+            user->Copy(arg1,arg2);
+        }
+        else if (cmd == "mv") {
+            user->Move(arg1,arg2);
+        }
+        else if (cmd == "cat"){
+            user->Cat(arg1);
+        }
         else if (cmd != "") {
-            cout << "shell : " << cmd << " : don't find this commond \n";
+            cout << "shell : " << cmd << " : don't find this command \n";
         }
 
     NEXT_INPUT:
-        cout << "[unix-fs " << user->u_curdir << " ]$ ";
+        cout << "[qihaoyu " << user->u_curdir << " ]$ ";
         if (autoFlag) {
             if (autoTest(line)) {
                 cout << line;

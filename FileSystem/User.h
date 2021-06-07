@@ -95,6 +95,9 @@ public:
     void Seek(string fd, string offset, string origin);
     void Write(string fd, string inFile, string size);
     void Read(string fd, string outFile, string size);
+	void Copy(string srcFile, string desPath);
+	void Move(string srcFile, string desPath);
+	void Cat(string srcFile);
 	void debug();
     //void Pwd();
     
