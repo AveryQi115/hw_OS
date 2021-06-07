@@ -122,6 +122,9 @@ void User::Seek(string sfd, string offset, string origin) {
     IsError();
 }
 
+// read 和 write这样设计的原因是inode并不会反向记录file结构
+// 直接通过fileName无法搜索到对应的fd，一般来说read和write是紧跟在open函数后面
+// 逻辑上是必须先打开了文件才能进行读写
 void User::Write(string sfd, string inFile, string size) {
     if (sfd.empty() || !isdigit(sfd.front())) {
         cout << "parameter fd can't be empty or be nonnumeric ! \n";
@@ -193,6 +196,76 @@ void User::Read(string sfd, string outFile, string size) {
     fout.close();
     cout << "read to " << outFile << " done ! \n";
     delete[]buffer;
+}
+
+void User::Copy(string srcFile, string desPath){
+    if (!checkPathName(srcFile)) {
+        return;
+    }
+
+    Inode* srcInode = fileManager->NameI(FileManager::OPEN);
+    string fileName = string(u_dbuf);
+    if (srcInode==NULL){
+        cout << "src file not found!"<<endl;
+        return;
+    }
+
+    if(!checkPathName(desPath)) {
+        return;
+    }
+    u_dirp+="/*"
+    fileManager->NameI(FileManager::CREATE);
+    if (u_pdir==NULL || u_pdir->i_mode & Inode::IFMT != Inode::IFDIR){
+        cout << "destination invalid!"<<endl;
+        return;
+    }
+
+    memcpy(u.u_dbuf,fileName.c_str(),sizeof(char)*(fileName.length()+1));
+    fileManager->WriteDir(srcInode);
+    IsError();					// 检查是否有错
+}
+
+void User::Move(string srcFile, string desPath){
+    Copy(srcFile,desPath);
+    Delete(srcFile);
+}
+
+void User::Cat(string srcFile){
+    Open(srcFile,"-r");
+    int fd = u_ar0[EAX];
+    File* file = fileManager->m_OpenFileTable->GetF(fd);
+    if ( NULL == File )
+	{
+        IsError();
+		return;
+	}
+
+    char[200] buf;
+
+    u_IOParam.m_Offset = 0;
+    u_IOParam.m_Count = min(file->f_inode->i_size,200);
+    u_IOParam.m_Base = buf;
+    file->f_inode->ReadI();
+    cout<<buf<<endl;
+
+    while(u_IOParam.m_Offset+200 > file->f_inode->i_size){
+        string command;
+        cin>>command;
+        cout<<endl;
+        if (command=="n"){
+            u_IOParam.m_Offset += 200;
+            u_IOParam.m_Count = min(file->f_inode->i_size - u_IOParam.m_Offset,200);
+            u_IOParam.m_Base = buf;
+            file->f_inode->ReadI();
+            cout<<buf<<endl;
+            continue;
+        }else if(command=="q"){
+            break;
+        }else{
+            continue;
+        }
+    }
+    IsError();
 }
 
 int User::INodeMode(string mode) {
