@@ -56,11 +56,6 @@ void FileManager::Creat()
 
 	/* 搜索目录的模式为1，表示创建；若父目录不可写，出错返回 */
 	pInode = this->NameI(FileManager::CREATE);
-	// cout<<"after NameI"<<endl;
-	// if (pInode!=NULL){
-	// 	pInode->debug();
-	// }
-
 	/* 没有找到相应的Inode，或NameI出错 */
 	if ( NULL == pInode )
 	{
@@ -68,11 +63,6 @@ void FileManager::Creat()
 			return;
 		/* 创建Inode */
 		pInode = this->MakNode(newACCMode);
-		// cout<<"after MakNode"<<endl;
-		// if (pInode!=NULL){
-		// 	pInode->debug();
-		// }
-
 		/* 创建失败 */
 		if ( NULL == pInode )
 		{
@@ -98,15 +88,20 @@ void FileManager::Creat()
 	}
 }
 
-/* 返回NULL表示目录搜索失败，否则是根指针，指向文件的内存打开i节点 ，上锁的内存i节点  */
+/***************************************
+ * NameI的搜索模式：
+ * 创建：返回NULL，父目录pInode存在u_pdir中，freeEntry记载第一个空闲目录项的偏移量
+ * 删除：返回父目录pInode，要删除的Inode存在m_ino中
+ * 其他：返回对应pInode（从diskInode存入InodeTable并返回内存中的Inode指针）
+ * *************************************/
 Inode* FileManager::NameI( enum DirectorySearchMode mode )
 {
 	User& u = g_User;
 	Inode* pInode = u.u_cdir;
 	Buf* pBuf;
 	BufferManager& bufMgr = g_BufferManager;
-	int freeEntryOffset;	/* 以创建文件模式搜索目录时，记录空闲目录项的偏移量 */
-	unsigned int index = 0, nindex = 1;
+	int freeEntryOffset;					/* 以创建文件模式搜索目录时，记录空闲目录项的偏移量 */
+	unsigned int index = 0, nindex = 1;		/* index和nindex是遍历当前路径名的指针 */
 
 	/* 
 	 * 如果该路径是'/'开头的，从根目录开始搜索，
@@ -141,48 +136,49 @@ Inode* FileManager::NameI( enum DirectorySearchMode mode )
 			break;	/* goto out; */
 		}
 
+		/* 当前文件夹名填入u_dbuf，index和nindex向下一项移动 */
+		// TODO:文件夹名称过长会覆盖尾零
 		nindex = u.u_dirp.find_first_of('/', index);
         memset(u.u_dbuf, 0, sizeof(u.u_dbuf));
         memcpy(u.u_dbuf, u.u_dirp.data() + index, (nindex == (unsigned int)string::npos ? u.u_dirp.length() : nindex) - index);
         index = nindex + 1;
 
-		/* 内层循环部分对于u.u_dbuf[]中的路径名分量，逐个搜寻匹配的目录项 */
+		/* *********
+		 * m_Offset: 	当前目录项偏移量
+		 * m_Count:		当前文件夹非空目录项个数（要搜索的个数）
+		 * *********/
 		u.u_IOParam.m_Offset = 0;
 		/* 设置为目录项个数 ，含空白的目录项*/
 		u.u_IOParam.m_Count = pInode->i_size / (DirectoryEntry::DIRSIZ+4);
 		freeEntryOffset = 0;
 		pBuf = NULL;
 
-		// 内层循环对当前path持续搜索直到
 		while (true)
 		{
-			/* 对目录项已经搜索完毕 */
 			if ( 0 == u.u_IOParam.m_Count )
 			{
 				if ( NULL != pBuf )
 				{
 					bufMgr.Brelse(pBuf);
 				}
-				/* 如果是创建新文件 */
+				/* 如果是创建新文件，记录当前offset当前文件夹(父目录)并返回NULL表示要创建的文件还不存在 */
 				if ( FileManager::CREATE == mode && nindex >= u.u_dirp.length() )
 				{
-					/* 将父目录Inode指针保存起来，以后写目录项WriteDir()函数会用到 */
 					u.u_pdir = pInode;
 
-					if ( freeEntryOffset )	/* 此变量存放了空闲目录项位于目录文件中的偏移量 */
+					if ( freeEntryOffset )
 					{
 						/* 将空闲目录项偏移量存入u区中，写目录项WriteDir()会用到 */
 						u.u_IOParam.m_Offset = freeEntryOffset - (DirectoryEntry::DIRSIZ+4);
 					}
-					else  /*问题：为何if分支没有置IUPD标志？  这是因为文件的长度没有变呀*/
+					else
 					{
 						pInode->i_flag |= Inode::IUPD;
 					}
-					/* 找到可以写入的空闲目录项位置，NameI()函数返回 */
 					return NULL;
 				}
 				
-				/* 目录项搜索完毕而没有找到匹配项，释放相关Inode资源，并推出 */
+				/* 目录项搜索完毕还没找到，记录错误信息并释放当前pInode */
 				u.u_error = User::U_ENOENT;
 				goto out;
 			}
@@ -215,7 +211,7 @@ Inode* FileManager::NameI( enum DirectorySearchMode mode )
 				/* 跳过空闲目录项，继续比较下一目录项 */
 				continue;
 			}
-
+			/* 匹配成功，跳出循环 */
 			if (!memcmp(u.u_dbuf, &u.u_dent.name, DirectoryEntry::DIRSIZ)) {
                 break;
             }
@@ -223,9 +219,7 @@ Inode* FileManager::NameI( enum DirectorySearchMode mode )
 		}
 
 		/* 
-		 * 从内层目录项匹配循环跳至此处，说明pathname中
-		 * 当前路径分量匹配成功了，还需匹配pathname中下一路径
-		 * 分量，直至遇到'\0'结束。
+		 * 前一段u_dbuf匹配成功
 		 */
 		if ( NULL != pBuf )
 		{
@@ -506,6 +500,9 @@ void FileManager::Rdwr( enum File::FileFlags mode )
 	u.u_ar0[User::EAX] = u.u_arg[2] - u.u_IOParam.m_Count;
 }
 
+/*******************************
+ * 备注：如果缓存为null，先将实际块加载到缓存中
+ * *****************************/
 void FileManager::Ls() {
     User &u = g_User;
     BufferManager& bufferManager = g_BufferManager;
