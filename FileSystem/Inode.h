@@ -1,6 +1,9 @@
 #ifndef INODE_H
 #define INODE_H
 
+#include <string>
+#include <iostream>
+using namespace std;
 #include "Buf.h"
 
 /*
@@ -87,6 +90,10 @@ public:
 	 * @comment 将包含外存Inode字符块中信息拷贝到内存Inode中
 	 */
 	void ICopy(Buf* bp, int inumber);
+
+	string getFileType();
+
+	string getFileMode();
 
 	void debug();
 	

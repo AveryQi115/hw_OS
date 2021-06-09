@@ -518,6 +518,9 @@ void FileManager::Ls() {
     u.u_IOParam.m_Offset = 0;
     u.u_IOParam.m_Count = pInode->i_size / sizeof(DirectoryEntry);
 
+	std::ostringstream stringStream;
+  	stringStream << "FileMode" << std::setw(10) << "InodeNum" << std::setw(10) << "FileSize" << std::setw(30) << "FileName" << endl;
+
     while (u.u_IOParam.m_Count) {
         if (0 == u.u_IOParam.m_Offset%Inode::BLOCK_SIZE) {
 			// 当前盘块遍历完读入下一个盘块
@@ -534,14 +537,21 @@ void FileManager::Ls() {
         if (0 == u.u_dent.m_ino)
             continue;
 
+		Inode* fileInode = this->m_InodeTable->IGet(u.u_dent.m_ino);
+		if (fileInode == NULL){
+			u.u_error = User::U_ENOENT;
+			return;
+		}
+
+		stringStream << fileInode->getFileType() << fileInode->getFileMode() << std::setw(10) << to_string(u.u_dent.m_ino) << std::setw(10) << to_string(fileInode->i_size) << "B" << std::setw(30) << u.u_dent.name << endl;
 		u.u_IOParam.m_Count--;
-        u.ls += u.u_dent.name;
-        u.ls += "\n";
     }
 
     if (pBuffer) {
         bufferManager.Brelse(pBuffer);
     }
+
+	u.ls = stringStream.str();
 }
 
 void FileManager::ChDir()

@@ -512,6 +512,34 @@ void Inode::ICopy(Buf *bp, int inumber)
 	}
 }
 
+string Inode::getFileType(){
+	if ((this->i_mode & Inode::IFMT) == Inode::IFDIR)
+		return "d";
+
+	return "-";
+}
+
+string Inode::getFileMode(){
+	string rwx = "";
+	if ((this->i_mode & Inode::IREAD) != 0)
+		rwx += "r";
+	else
+		rwx += "-";
+
+	if ((this->i_mode & Inode::IWRITE) != 0)
+		rwx += "w";
+	else
+		rwx += "-";
+
+	if ((this->i_mode & Inode::IEXEC) != 0)
+		rwx += "x";
+	else
+		rwx += "-";
+
+	return rwx;
+}
+
+
 void Inode::debug(){
 	cout << "disk inumber: "<<i_number<<endl;
 	cout << "file size: "<<i_size<<endl;

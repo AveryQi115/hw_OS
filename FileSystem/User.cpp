@@ -41,7 +41,7 @@ void User::Ls() {
     if (IsError()) {
         return;
     }
-    cout << ls << endl;
+    cout << ls;
 }
 
 void User::Cd(string dirName) {
