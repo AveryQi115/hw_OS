@@ -338,15 +338,9 @@ void FileManager::WriteDir(Inode* pInode)
 	u.u_IOParam.m_Count = DirectoryEntry::DIRSIZ + 4;
 	u.u_IOParam.m_Base = (unsigned char *)&u.u_dent;
 
-
-
-	/* 将目录项写入父目录文件 */
-	if (u.u_IOParam.m_Offset < u.u_pdir->i_size){
-		u.u_pdir->i_size += DirectoryEntry::DIRSIZ+4;
-	}
-
 	// WriteI是写文件的通用函数，只有当写入后offset超过原文件大小时才会更新文件size
-	u.u_pdir->WriteI();
+	u.u_pdir->WriteI(Inode::DIR);
+	u.u_pdir->i_size += DirectoryEntry::DIRSIZ + 4;
 	this->m_InodeTable->IPut(u.u_pdir);
 }
 
@@ -397,7 +391,7 @@ void FileManager::UnLink()
 	
 	u.u_dent.m_ino = 0;
 	memcpy(u.u_dent.name,"",sizeof(char)*DirectoryEntry::DIRSIZ);
-	pDeleteInode->WriteI();
+	pDeleteInode->WriteI(Inode::DIR);
 
 	/* 修改inode项 */
 	pInode->i_nlink--;
@@ -490,7 +484,7 @@ void FileManager::Rdwr( enum File::FileFlags mode )
 	}
 	else
 	{
-		pFile->f_inode->WriteI();
+		pFile->f_inode->WriteI(Inode::BIT);
 	}
 
 	/* 根据读写字数，移动文件读写偏移指针 */

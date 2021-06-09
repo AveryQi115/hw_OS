@@ -27,6 +27,11 @@ public:
 		// IWANT = 0x10,		/* 有进程正在等待该内存inode被解锁，清ILOCK标志时，要唤醒这种进程 */
 		// ITEXT = 0x20		/* 内存inode对应进程图像的正文段 */
 	};
+	enum WriteMode
+	{
+		DIR = 0,
+		BIT = 1,
+	};
 	
 	/* static const member */
 	static const unsigned int IALLOC = 0x8000;		/* 文件被使用 */
@@ -67,7 +72,7 @@ public:
 	/* 
 	 * @comment 根据Inode对象中的物理磁盘块索引表，将数据写入文件
 	 */
-	void WriteI();
+	void WriteI(WriteMode mode);
 	/* 
 	 * @comment 将文件的逻辑块号转换成对应的物理盘块号
 	 */

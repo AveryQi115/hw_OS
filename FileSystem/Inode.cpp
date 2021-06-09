@@ -104,7 +104,7 @@ void Inode::ReadI()
 // 如果对当前物理块写入的字节为整块，则为该物理块分配缓存后直接写
 // 如果不是整块，则先将对应物理块读入缓存再写相应位置
 // 延迟写
-void Inode::WriteI()
+void Inode::WriteI(WriteMode mode)
 {
 	int lbn;	/* 文件逻辑块号 */
 	int bn;		/* lbn对应的物理盘块号 */
@@ -168,7 +168,7 @@ void Inode::WriteI()
 		bufMgr.Bwrite(pBuf);
 
 		/* 普通文件长度增加 */
-		if(this->i_size < u.u_IOParam.m_Offset)
+		if(mode == BIT && this->i_size < u.u_IOParam.m_Offset)
 		{
 			this->i_size = u.u_IOParam.m_Offset;
 		}
