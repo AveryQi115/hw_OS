@@ -226,14 +226,37 @@ void User::Copy(string srcFile, string desPath){
 }
 
 void User::Move(string srcFile, string desPath){
-    Copy(srcFile,desPath);
+    if (!checkPathName(srcFile)) {
+        return;
+    }
+
+    Inode* srcInode = fileManager->NameI(FileManager::OPEN);
+    string fileName = string(u_dbuf);
+    if (srcInode==NULL){
+        cout << "src file not found!"<<endl;
+        return;
+    }
+
+    if(!checkPathName(desPath)) {
+        return;
+    }
+    u_dirp+="/*";
+    fileManager->NameI(FileManager::CREATE);
+    if (u_pdir==NULL || u_pdir->i_mode & Inode::IFMT != Inode::IFDIR){
+        cout << "destination invalid!"<<endl;
+        return;
+    }
+
+    memcpy(u_dbuf,fileName.c_str(),sizeof(char)*(fileName.length()+1));
+    fileManager->WriteDir(srcInode);
+    IsError();					// 检查是否有错
     Delete(srcFile);
 }
 
 void User::Cat(string srcFile){
     Open(srcFile,"-r");
     int fd = u_ar0[EAX];
-    File* file = fileManager->m_OpenFileTable->GetF(fd);
+    File* file = u_ofiles.GetF(fd);
     if ( NULL == file )
 	{
         IsError();
@@ -248,14 +271,13 @@ void User::Cat(string srcFile){
     file->f_inode->ReadI();
     cout<<buf<<endl;
 
-    while(u_IOParam.m_Offset+200 > file->f_inode->i_size){
+    while(u_IOParam.m_Offset < file->f_inode->i_size){
         string command;
         cin>>command;
         cout<<endl;
         if (command=="n"){
-            u_IOParam.m_Offset += 200;
             u_IOParam.m_Count = min(file->f_inode->i_size - u_IOParam.m_Offset,200);
-            u_IOParam.m_Base = (unsigned char *)buf;
+            u_IOParam.m_Base = (unsigned char*)buf;
             file->f_inode->ReadI();
             cout<<buf<<endl;
             continue;
@@ -265,6 +287,8 @@ void User::Cat(string srcFile){
             continue;
         }
     }
+    IsError();
+    Close(to_string(fd));
     IsError();
 }
 
