@@ -233,7 +233,7 @@ void User::Move(string srcFile, string desPath){
 void User::Cat(string srcFile){
     Open(srcFile,"-r");
     int fd = u_ar0[EAX];
-    File* file = fileManager->m_OpenFileTable->GetF(fd);
+    File* file = u_ofiles.GetF(fd);
     if ( NULL == file )
 	{
         IsError();
@@ -248,12 +248,11 @@ void User::Cat(string srcFile){
     file->f_inode->ReadI();
     cout<<buf<<endl;
 
-    while(u_IOParam.m_Offset+200 > file->f_inode->i_size){
+    while(u_IOParam.m_Offset < file->f_inode->i_size){
         string command;
         cin>>command;
         cout<<endl;
         if (command=="n"){
-            u_IOParam.m_Offset += 200;
             u_IOParam.m_Count = min(file->f_inode->i_size - u_IOParam.m_Offset,200);
             u_IOParam.m_Base = (unsigned char *)buf;
             file->f_inode->ReadI();
