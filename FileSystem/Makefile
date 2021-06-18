@@ -1,7 +1,7 @@
 CC = g++
 CXX_FLAGS = -std=c++11 -w -g
 
-BIN = unix-fs
+BIN = qihaoyu-fs
 
 $(BIN): main.o Buffer.o BufferManager.o DeviceDriver.o File.o FileManager.o FileSystem.o INode.o OpenFileManager.o User.o Utility.o
 	$(CC) -o $@ $^
