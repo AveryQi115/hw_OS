@@ -122,31 +122,50 @@ void User::Seek(string sfd, string offset, string origin) {
     IsError();
 }
 
-// read 和 write这样设计的原因是inode并不会反向记录file结构
-// 直接通过fileName无法搜索到对应的fd，一般来说read和write是紧跟在open函数后面
-// 逻辑上是必须先打开了文件才能进行读写
-void User::Write(string sfd, string inFile, string size) {
-    if (sfd.empty() || !isdigit(sfd.front())) {
-        cout << "parameter fd can't be empty or be nonnumeric ! \n";
-        return;
-    }
-    int fd = stoi(sfd);
+void User::write(string fileName, string inFile, string size, string mode) {
+    Open(fileName,mode);
 
-    int usize;
-    if (size.empty() || (usize = stoi(size)) < 0) {
-        cout << "parameter size must be greater or equal than 0 ! \n";
-        return;
+    int fd = u_ar0[EAX];
+    write(fd, inFile, size);
+
+    Close(to_string(fd));
+}
+
+void User::write(int fd, string inFile, string size) {
+    int usize = stoi(size);
+    char* buffer;
+    if (size.empty() || usize < 0) {
+        // 写全部文件
+        ifstream fin(inFile, ios::in | ios::binary | ios::ate );
+        if (!fin) {
+            cout << "file " << inFile << " open failed ! \n";
+            return;
+        }
+        // TODO: here's a warning.tellg returns a token and may not convert to an int
+        ifstream::pos_type pos = fin.tellg();
+        int length = pos;
+        cout<<length<<endl;
+        if (length<0){
+            cout << "file length " << length << " invalid ! \n";
+            return;
+        }
+
+        usize = length;
+        buffer = new char[length];
+        fin.seekg(0, ios::beg);
+        fin.read(buffer, length);
+        fin.close();
+    } else {
+        buffer = new char[usize];
+        fstream fin(inFile, ios::in | ios::binary);
+        if (!fin) {
+            cout << "file " << inFile << " open failed ! \n";
+            return;
+        }
+        fin.read(buffer, usize);
+        fin.close();
     }
 
-    char *buffer = new char[usize];
-    fstream fin(inFile, ios::in | ios::binary);
-    if (!fin) {
-        cout << "file " << inFile << " open failed ! \n";
-        return;
-    }
-    fin.read(buffer, usize);
-    fin.close();
-    //cout << "fd = " << fd << " inFile = " << inFile << " size = " << usize << "\n";
     u_arg[0] = fd;
     u_arg[1] = (long)buffer;
     u_arg[2] = usize;
@@ -158,20 +177,79 @@ void User::Write(string sfd, string inFile, string size) {
     delete[]buffer;
 }
 
-void User::Read(string sfd, string outFile, string size) {
-    if (sfd.empty() || !isdigit(sfd.front())) {
-        cout << "parameter fd can't be empty or be nonnumeric ! \n";
+void User::Write(string sfd, string inFile, string size) {
+    if (sfd.empty()) {
+        cout << "parameter fd can't be empty! \n";
+        return;
+    }
+
+    if (size.empty()){
+        cout << "parameter size can't be empty! \n";
+        return;
+    }
+
+    if (!isdigit(sfd.front())){
+        // 以读文件的方式读
+        // 读完关闭文件
+        string filename = sfd;
+        write(filename, inFile, size, "-rw");
         return;
     }
     int fd = stoi(sfd);
+    write(fd,inFile,size);
+}
 
-    int usize;
-    if (size.empty() || !isdigit(size.front()) || (usize = stoi(size)) < 0) {
-        cout << "parameter size is not right \n";
+void User::readImage(string fileName, int fd) {
+    
+    int usize = u_ofiles.GetF(fd)->f_inode->i_size;
+    char* buffer = new char[usize];
+
+    u_arg[0] = fd;
+    u_arg[1] = (long)buffer;
+    u_arg[2] = usize;
+    fileManager->Read();
+    if (IsError())
+        return;
+
+    cout << "read " << u_ar0[User::EAX] << " bytes success : \n" ;
+
+    fstream fout(fileName, ios::out | ios::binary);
+    if (!fout) {
+        cout << "file " << fileName << " open failed ! \n";
         return;
     }
-    char *buffer = new char[usize];
-    //cout << "fd = " << fd << " outFile = " << outFile << " size = " << size << "\n";
+    fout.write(buffer, u_ar0[User::EAX]);
+    fout.close();
+
+    system(string("open "+fileName).c_str());
+
+    Close(to_string(fd));
+}
+
+//TODO: 加上特定后缀文件指定api
+void User::read(string fileName, string outFile, string size, string mode) {
+    Open(fileName,mode);
+    int fd = u_ar0[EAX];
+
+    // 识别图片
+    if (Utility::has_suffix(fileName,".jpg") || Utility::has_suffix(fileName,".JPG") || Utility::has_suffix(fileName,".PNG") || Utility::has_suffix(fileName,".png")){
+        readImage(fileName,fd);
+        return;
+    }
+
+    read(fd,outFile,size);
+
+    Close(to_string(fd));
+}
+
+void User::read(int fd, string outFile, string size) {
+    int usize = stoi(size);
+    if (usize < 0){
+        usize = u_ofiles.GetF(fd)->f_inode->i_size;
+    }
+
+    char* buffer = new char[usize];
+
     u_arg[0] = fd;
     u_arg[1] = (long)buffer;
     u_arg[2] = usize;
@@ -196,6 +274,31 @@ void User::Read(string sfd, string outFile, string size) {
     fout.close();
     cout << "read to " << outFile << " done ! \n";
     delete[]buffer;
+}
+
+void User::Read(string sfd, string outFile, string size) {
+    if (sfd.empty()) {
+        cout << "parameter fd can't be empty! \n";
+        return;
+    }
+
+    if (size.empty()){
+        cout << "parameter size can't be empty! \n";
+        return;
+    }
+
+    if (!isdigit(sfd.front())){
+        // 以读文件的方式读
+        // 读完关闭文件
+        string filename = sfd;
+        read(filename, outFile, size, "-r");
+        return;
+    }
+
+    int fd = stoi(sfd);
+
+    //以读fd的方式读文件
+    read(fd, outFile, size);
 }
 
 void User::Copy(string srcFile, string desPath){

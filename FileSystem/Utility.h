@@ -2,6 +2,7 @@
 #define UITILITY_H
 
 #include <bits/stdc++.h>
+#include <string.h>
 using namespace std;
 
 /*
@@ -22,6 +23,7 @@ public:
 	static void memset(void *s, int ch, size_t n);
 	static int memcmp(const void *buf1, const void *buf2, unsigned int count);
 	static int min(int a, int b);
+	static bool has_suffix(string str,string suffix);
 	static time_t time(time_t* t);
 };
 

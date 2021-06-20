@@ -417,9 +417,9 @@ int main() {
         }
         else if (cmd == "read") {
             if (arg2 == "-o")
-                user->Read(arg1, arg3, args[4]);
+                user->Read(arg1, arg3, args[4]);    //arg3:outFile arg4:size
             else
-                user->Read(arg1, "", arg2);
+                user->Read(arg1, "", arg2);         //arg2:size
         }
         else if (cmd == "write") {
             user->Write(arg1, arg2, arg3);

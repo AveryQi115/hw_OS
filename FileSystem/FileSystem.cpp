@@ -117,7 +117,8 @@ void FileSystem::FormatDevice() {
             deviceDriver->write(&freeBlock1, BLOCK_SIZE);
             superBlock->s_nfree = 0;
         }
-        else {
+        // 空一个，第一个代表0是空盘块，第二个才写1024盘块
+        else if(i!=0){
             deviceDriver->write(freeBlock, BLOCK_SIZE);
         }
 		// 起始的盘块写作0代表没有下一个空闲盘块

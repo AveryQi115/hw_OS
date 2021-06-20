@@ -1,5 +1,6 @@
 #include "Utility.h"
 
+
 void Utility::memcpy(void *dest, const void *src, size_t n) {
 	::memcpy(dest, src, n);
 }
@@ -20,4 +21,8 @@ int Utility::min(int a, int b) {
 
 time_t Utility::time(time_t* t) {
 	return ::time(t);
+}
+
+bool Utility::has_suffix(string str, string substr) {
+	return str.find(substr,str.size()-substr.size())!=-1;
 }

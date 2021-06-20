@@ -107,6 +107,11 @@ private:
     int INodeMode(string mode);
     int FileMode(string mode);
     bool checkPathName(string path);
+	void read(string fileName, string outFile, string size, string mode);
+	void read(int fd, string outFile, string size);
+	void write(string fileName, string inFile, string size, string mode);
+	void write(int fd, string inFile, string size);
+	void readImage(string fileName, int fd);
 };
 
 #endif
